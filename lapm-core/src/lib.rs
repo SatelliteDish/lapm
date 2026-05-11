@@ -46,6 +46,7 @@ pub enum LapmCommand {
 pub enum LapmLayerCommand {
     Add{ name: String, password: String },
     List,
+    Open{ name: String, password: String },
 }
 
 impl IpcMessage for LapmCommand {}

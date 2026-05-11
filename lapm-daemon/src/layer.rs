@@ -50,6 +50,26 @@ impl Layer {
             LayerState::Closed => false,
         }
     }
+
+    pub fn open(&mut self, password: &str) -> Result<(),String> {
+        if self.is_open() {
+            return Ok(());
+        }
+
+        let mut file = File::open(&self.path)
+            .map_err(|e| e.to_string())?;
+        let key = DatabaseKey::new().with_password(password);
+        let db = Database::open(&mut file, key)
+            .map_err(|e| e.to_string())?;
+
+        self.state = LayerState::Open {
+            public_usernames: false,
+            timeout: TimeDelta::new(10,10).unwrap(),
+            last_used: Instant::now(),
+            db,
+        };
+        Ok(())
+    }
 }
 
 impl From<Layer> for LayerInfo {

@@ -31,10 +31,6 @@ impl App {
     pub fn get_layers(&self) -> Vec<Layer> {
         todo!()
     }
-
-    // pub fn open_layer(index: usize) -> {
-
-    // }
 }
 
 #[tokio::main]

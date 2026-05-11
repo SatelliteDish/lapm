@@ -55,6 +55,12 @@ async fn execute_layer_command(app: Arc<Mutex<App>>, command: LapmLayerCommand, 
                 .map(|lyr| LayerInfo::from(lyr.clone()))
                 .collect::<Vec<_>>();
             ListLayersResponse{ layers: layer_info }.send(stream).await
-        }
+        },
+        LapmLayerCommand::Open { name, password } => {
+            let layer = state.config.layers.iter_mut()
+                .find(|lyr| lyr.name.as_str() == name.as_str())
+                .ok_or(format!("Could not find layer \"{name}\""))?;
+            layer.open(&password)
+        },
     }
 }

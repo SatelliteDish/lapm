@@ -30,6 +30,7 @@ enum CliCommand {
 enum LayerCommand {
     Add{ name: String, password: String },
     List,
+    Open{ name: String, password: String },
 }
 
 struct LayerInfoTable(LayerInfo);
@@ -98,6 +99,14 @@ async fn main() -> Result<(), String> {
 
                     Ok(())
                 },
+                LayerCommand::Open { name, password } => {
+                    let sock_name = lapm_core::get_connection_name()?;
+                    let mut stream = Stream::connect(sock_name).await
+                        .map_err(|e| format!("Failed to open stream: {e}"))?;
+                    LapmCommand::Layer(
+                        LapmLayerCommand::Open { name, password }
+                    ).send(&mut stream).await
+                }
             }
         },
     }
