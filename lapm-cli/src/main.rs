@@ -1,6 +1,8 @@
 use lapm_core::{IpcMessage as _, LapmCommand, LapmLayerCommand, LayerInfo, ListLayersResponse};
 use clap::{Parser,Subcommand};
-use tabled::{Tabled,Table,settings::{Style,object::{Columns,Rows},Modify,Width,Color}};
+use tabled::{Table, Tabled, settings::{Color, Modify, Style, Width, object::{Columns,Rows}}};
+
+mod password;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -22,9 +24,9 @@ enum CliCommand {
 #[derive(Subcommand, Clone)]
 #[command(version, about, long_about = None)]
 enum LayerCommand {
-    Add{ name: String, password: String },
+    Add{ name: String },
     List,
-    Open{ name: String, password: String },
+    Open{ name: String },
 }
 
 struct LayerInfoTable(LayerInfo);
@@ -55,19 +57,25 @@ impl Tabled for LayerInfoTable {
     }
 }
 
+
+
 #[tokio::main]
-async fn main() -> Result<(), String> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Cli::parse();
 
     match args.command {
         CliCommand::Layer{ layer } => {
             match layer {
-                LayerCommand::Add{ name, password } => {
+                LayerCommand::Add{ name } => {
+                    let password = password::get_and_confirm_password()?;
+
+                    // Open stream AFTER password is received
                     let mut stream = lapm_core::get_connection_stream().await?;
                     let command = LapmCommand::Layer(
                         LapmLayerCommand::Add{ name, password },
                     );
-                    command.send(&mut stream).await
+                    command.send(&mut stream).await?;
+                    Ok(())
                 },
                 LayerCommand::List => {
                     let mut stream = lapm_core::get_connection_stream().await?;
@@ -88,14 +96,21 @@ async fn main() -> Result<(), String> {
 
                     Ok(())
                 },
-                LayerCommand::Open { name, password } => {
+                LayerCommand::Open { name } => {
+                    let password = password::prompt_password(
+                        format!("Please enter the password for layer \"{name}\":"),
+                        3
+                    )?;
+
+                    // Open stream AFTER password is received
                     let mut stream = lapm_core::get_connection_stream().await?;
                     LapmCommand::Layer(
                         LapmLayerCommand::Open { name, password }
-                    ).send(&mut stream).await
+                    ).send(&mut stream).await?;
+
+                    Ok(())
                 }
             }
         },
     }
-
 }
