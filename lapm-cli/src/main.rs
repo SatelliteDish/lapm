@@ -1,4 +1,4 @@
-use lapm_core::{IpcMessage as _, LapmCommand, LapmLayerCommand, LayerInfo, ListLayersResponse};
+use lapm_core::{IpcMessage, LapmCommand, LapmLayerCommand, LayerInfo, ListLayersResponse};
 use clap::{Parser,Subcommand};
 use tabled::{Table, Tabled, settings::{Color, Modify, Style, Width, object::{Columns,Rows}}};
 
@@ -18,6 +18,10 @@ enum CliCommand {
     Layer {
         #[command(subcommand)]
         layer: LayerCommand,
+    },
+    Entry {
+        #[command(subcommand)]
+        entry: EntryCommand,
     },
 }
 
@@ -59,6 +63,16 @@ impl Tabled for LayerInfoTable {
 
 
 
+#[derive(Subcommand, Clone)]
+#[command(version, about, long_about = None)]
+enum EntryCommand {
+    Add{
+        #[arg(short,long)]
+        layer: String
+    }
+}
+
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Cli::parse();
@@ -74,13 +88,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let command = LapmCommand::Layer(
                         LapmLayerCommand::Add{ name, password },
                     );
-                    command.send(&mut stream).await?;
+                    IpcMessage::from(command).request::<()>(&mut stream).await?;
                     Ok(())
                 },
                 LayerCommand::List => {
                     let mut stream = lapm_core::get_connection_stream().await?;
-                    LapmCommand::Layer(LapmLayerCommand::List).send(&mut stream).await?;
-                    let res = ListLayersResponse::receive(&mut stream).await?;
+                    let res = IpcMessage::from(LapmCommand::Layer(LapmLayerCommand::List)).request::<ListLayersResponse>(&mut stream).await?;
                     let rows = res.layers.into_iter()
                         .map(|lyr| LayerInfoTable::from(lyr));
                     let mut table = Table::new(rows.clone());
@@ -104,13 +117,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                     // Open stream AFTER password is received
                     let mut stream = lapm_core::get_connection_stream().await?;
-                    LapmCommand::Layer(
+                    IpcMessage::from(LapmCommand::Layer(
                         LapmLayerCommand::Open { name, password }
-                    ).send(&mut stream).await?;
+                    )).request::<()>(&mut stream).await?;
 
                     Ok(())
                 }
             }
         },
+        CliCommand::Entry { entry } => {
+            match entry {
+                EntryCommand::Add { layer } => {
+
+
+                    Ok(())
+                }
+            }
+        }
     }
 }
