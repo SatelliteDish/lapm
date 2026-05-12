@@ -13,8 +13,7 @@ pub enum PasswordError {
 pub fn prompt_and_validate_password(prompt: impl std::fmt::Display, tries: u8, validator: impl Fn(&str) -> bool) -> Result<String,PasswordError> {
     for _ in 0..tries {
         println!("{prompt}");
-        let password = rpassword::read_password()
-            .map_err(|e| PasswordError::from(e))?;
+        let password = rpassword::read_password()?;
         if validator(&password) {
             return Ok(password);
         }
@@ -28,12 +27,13 @@ pub fn prompt_password(prompt: impl std::fmt::Display, tries: u8) -> Result<Stri
 }
 
 pub fn get_and_confirm_password() -> Result<String, PasswordError> {
-    let password = prompt_password("Please enter a new password:", 3)?;
+    let tries = 3_u8;
+    let password = prompt_password("Please enter a new password:", tries)?;
     prompt_and_validate_password(
-        "Please re-enter your password", 3, |pw| pw == password
+        "Please re-enter your password:", tries, |pw| pw == password
     ).map_err(|e| {
             if let PasswordError::InvalidEntry = e {
-                PasswordError::FailedConfirmation { tries: 3 }
+                PasswordError::FailedConfirmation { tries }
             } else { e }
     })
 }
