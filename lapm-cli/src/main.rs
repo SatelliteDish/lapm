@@ -33,14 +33,14 @@ enum LayerCommand {
     Open{ name: String },
 }
 
-struct LayerInfoTable(LayerInfo);
-impl From<LayerInfo> for LayerInfoTable {
+struct LayerInfoTableRow(LayerInfo);
+impl From<LayerInfo> for LayerInfoTableRow {
     fn from(value: LayerInfo) -> Self {
         Self(value)
     }
 }
 
-impl Tabled for LayerInfoTable {
+impl Tabled for LayerInfoTableRow {
     const LENGTH: usize = 3;
 
     fn fields(&self) -> Vec<std::borrow::Cow<'_, str>> {
@@ -61,7 +61,30 @@ impl Tabled for LayerInfoTable {
     }
 }
 
+struct LayerInfoTable {
+    pub layers: Vec<LayerInfoTableRow>,
+}
 
+impl From<LayerInfoTable> for Table {
+    fn from(value: LayerInfoTable) -> Self {
+        let mut table = Table::new(&value.layers);
+        for (i, layer) in value.layers.iter().enumerate() {
+            let color = if layer.0.open { Color::FG_GREEN } else { Color::FG_RED };
+            table.with(Modify::new(Rows::one(i + 1)).with(color));
+        }
+
+        table
+            .with(Style::modern())
+            .with(Modify::new(Columns::last()).with(Width::increase(13)));
+        table
+    }
+}
+
+impl FromIterator<LayerInfoTableRow> for LayerInfoTable {
+    fn from_iter<T: IntoIterator<Item = LayerInfoTableRow>>(iter: T) -> Self {
+        Self { layers: iter.into_iter().collect() }
+    }
+}
 
 #[derive(Subcommand, Clone)]
 #[command(version, about, long_about = None)]
@@ -94,18 +117,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 LayerCommand::List => {
                     let mut stream = lapm_core::stream::get_connection_stream().await?;
                     let res = IpcMessage::from_ok(LapmCommand::Layer(LapmLayerCommand::List)).request::<ListLayersResponse>(&mut stream).await?;
-                    let rows = res.layers.into_iter()
-                        .map(|lyr| LayerInfoTable::from(lyr));
-                    let mut table = Table::new(rows.clone());
-                    for (i, layer) in rows.enumerate() {
-                        let color = if layer.0.open { Color::FG_GREEN } else { Color::FG_RED };
-                        table.with(Modify::new(Rows::one(i + 1)).with(color));
-                    }
-
-                    table
-                        .with(Style::modern())
-                        .with(Modify::new(Columns::last()).with(Width::increase(13)));
-                    println!("{table}");
+                    let table = res.layers.into_iter()
+                        .map(|lyr| LayerInfoTableRow::from(lyr))
+                        .collect::<LayerInfoTable>();
+                    println!("{}", Table::from(table));
 
                     Ok(())
                 },
