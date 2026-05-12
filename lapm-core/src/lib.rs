@@ -69,3 +69,9 @@ pub fn get_connection_name() -> Result<Name<'static>, String> {
     "lapm.sock".to_ns_name::<GenericNamespaced>()
         .map_err(|e| format!("Failed to create socket name: {e}"))
 }
+
+pub async fn get_connection_stream() -> Result<Stream, String> {
+    let name = get_connection_name()?;
+    Stream::connect(name).await
+        .map_err(|e| e.to_string())
+}

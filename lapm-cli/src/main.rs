@@ -1,10 +1,4 @@
 use lapm_core::{IpcMessage as _, LapmCommand, LapmLayerCommand, LayerInfo, ListLayersResponse};
-use interprocess::local_socket::{
-    tokio::{
-        Stream,
-        prelude::*
-    },
-};
 use clap::{Parser,Subcommand};
 use tabled::{Tabled,Table,settings::{Style,object::{Columns,Rows},Modify,Width,Color}};
 
@@ -69,19 +63,14 @@ async fn main() -> Result<(), String> {
         CliCommand::Layer{ layer } => {
             match layer {
                 LayerCommand::Add{ name, password } => {
-
-                    let sock_name = lapm_core::get_connection_name()?;
-                    let mut stream = Stream::connect(sock_name).await
-                        .map_err(|e| format!("Failed to open stream: {e}"))?;
+                    let mut stream = lapm_core::get_connection_stream().await?;
                     let command = LapmCommand::Layer(
                         LapmLayerCommand::Add{ name, password },
                     );
                     command.send(&mut stream).await
                 },
                 LayerCommand::List => {
-                    let sock_name = lapm_core::get_connection_name()?;
-                    let mut stream = Stream::connect(sock_name).await
-                        .map_err(|e| format!("Failed to open stream: {e}"))?;
+                    let mut stream = lapm_core::get_connection_stream().await?;
                     LapmCommand::Layer(LapmLayerCommand::List).send(&mut stream).await?;
                     let res = ListLayersResponse::receive(&mut stream).await?;
                     let rows = res.layers.into_iter()
@@ -100,9 +89,7 @@ async fn main() -> Result<(), String> {
                     Ok(())
                 },
                 LayerCommand::Open { name, password } => {
-                    let sock_name = lapm_core::get_connection_name()?;
-                    let mut stream = Stream::connect(sock_name).await
-                        .map_err(|e| format!("Failed to open stream: {e}"))?;
+                    let mut stream = lapm_core::get_connection_stream().await?;
                     LapmCommand::Layer(
                         LapmLayerCommand::Open { name, password }
                     ).send(&mut stream).await
