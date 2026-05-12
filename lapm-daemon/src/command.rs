@@ -13,7 +13,7 @@ use std::sync::{Arc,Mutex};
 use crate::App;
 
 pub async fn handle_commands(app: Arc<Mutex<App>>) -> Result<(), String> {
-    let sock_name = lapm_core::get_connection_name()?;
+    let sock_name = lapm_core::stream::get_connection_name()?;
     let listener = ListenerOptions::new().name(sock_name.clone()).create_tokio().map_err(|e| e.to_string())?;
 
     let local = tokio::task::LocalSet::new();
@@ -37,26 +37,29 @@ pub async fn handle_commands(app: Arc<Mutex<App>>) -> Result<(), String> {
     Ok(())
 }
 
-async fn execute_command(app: Arc<Mutex<App>>, command: LapmCommand, stream: &mut Stream) -> Result<(),String> {
+async fn execute_command(app: Arc<Mutex<App>>, command: LapmCommand, stream: &mut Stream) -> Result<(),Box<dyn std::error::Error>> {
     match command {
         LapmCommand::Layer(layer) => execute_layer_command(app, layer, stream).await,
-    }
+    }.map_err(|e| e.into())
 }
 
-async fn execute_layer_command(app: Arc<Mutex<App>>, command: LapmLayerCommand, stream: &mut Stream) -> Result<(),String> {
+async fn execute_layer_command(app: Arc<Mutex<App>>, command: LapmLayerCommand, stream: &mut Stream) -> Result<(), Box<dyn std::error::Error>> {
     let mut state = app.lock()
         .map_err(|e| e.to_string())?;
     match command {
         LapmLayerCommand::Add { name, password } => {
-            IpcMessage(
-                state.add_layer(name, password).map_err(|e| IpcError::Unauthorized(e))
-            ).send(stream).await
+            let add_res = state.add_layer(name, password)
+                .map_err(|e| IpcError::Unauthorized(e));
+            IpcMessage::from(add_res).send(stream).await
         },
         LapmLayerCommand::List => {
             let layer_info = state.config.layers.iter()
                 .map(|lyr| LayerInfo::from(lyr.clone()))
                 .collect::<Vec<_>>();
-            IpcMessage::from(ListLayersResponse{ layers: layer_info }).send(stream).await
+            IpcMessage::from_ok(
+                ListLayersResponse{ layers: layer_info }
+            )
+                .send(stream).await
         },
         LapmLayerCommand::Open { name, password } => {
             let layer_opt = state.config.layers.iter_mut()
@@ -66,14 +69,17 @@ async fn execute_layer_command(app: Arc<Mutex<App>>, command: LapmLayerCommand, 
                 IpcMessage(
                     layer.open(&password)
                         .map_err(|e| IpcError::Unauthorized(e))
-                ).send(stream).await
+                )
+                    .send(stream).await
+                    .map_err(|e| e.into())
             } else {
-                IpcMessage::<()>(
-                    Err(IpcError::NotFound(
+                IpcMessage::<()>::from_err(
+                    IpcError::NotFound(
                         format!("layer {name} not found")
-                    ))
-                ).send(stream).await
+                    )
+                )
+                    .send(stream).await
             }
         },
-    }
+    }.map_err(|e| e.into())
 }

@@ -84,16 +84,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let password = password::get_and_confirm_password()?;
 
                     // Open stream AFTER password is received
-                    let mut stream = lapm_core::get_connection_stream().await?;
+                    let mut stream = lapm_core::stream::get_connection_stream().await?;
                     let command = LapmCommand::Layer(
                         LapmLayerCommand::Add{ name, password },
                     );
-                    IpcMessage::from(command).request::<()>(&mut stream).await?;
+                    IpcMessage::from_ok(command).request_empty(&mut stream).await?;
                     Ok(())
                 },
                 LayerCommand::List => {
-                    let mut stream = lapm_core::get_connection_stream().await?;
-                    let res = IpcMessage::from(LapmCommand::Layer(LapmLayerCommand::List)).request::<ListLayersResponse>(&mut stream).await?;
+                    let mut stream = lapm_core::stream::get_connection_stream().await?;
+                    let res = IpcMessage::from_ok(LapmCommand::Layer(LapmLayerCommand::List)).request::<ListLayersResponse>(&mut stream).await?;
                     let rows = res.layers.into_iter()
                         .map(|lyr| LayerInfoTable::from(lyr));
                     let mut table = Table::new(rows.clone());
@@ -116,10 +116,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     )?;
 
                     // Open stream AFTER password is received
-                    let mut stream = lapm_core::get_connection_stream().await?;
-                    IpcMessage::from(LapmCommand::Layer(
+                    let mut stream = lapm_core::stream::get_connection_stream().await?;
+                    IpcMessage::from_ok(LapmCommand::Layer(
                         LapmLayerCommand::Open { name, password }
-                    )).request::<()>(&mut stream).await?;
+                    )).request_empty(&mut stream).await?;
 
                     Ok(())
                 }
