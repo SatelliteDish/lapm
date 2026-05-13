@@ -9,15 +9,25 @@ pub use stream::{
 
 
 #[derive(Debug, Serialize, Deserialize)]
-pub enum LapmCommand {
-    Layer(LapmLayerCommand),
+pub enum DaemonCommand {
+    Layer(DaemonLayerCommand),
+    Entry(DaemonEntryCommand),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub enum LapmLayerCommand {
+pub enum DaemonLayerCommand {
     Add{ name: String, password: String },
     List,
     Open{ name: String, password: String },
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum DaemonEntryCommand {
+    Add {
+        name: String,
+        password: String,
+        layer: String,
+    },
 }
 
 #[derive(Debug,Serialize,Deserialize,Clone)]
