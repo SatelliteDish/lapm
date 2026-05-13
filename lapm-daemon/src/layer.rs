@@ -1,6 +1,5 @@
 use chrono::TimeDelta;
 use lapm_core::{IpcError, LayerInfo};
-use postcard::fixint::le;
 use std::{fs::File, path::{Path,PathBuf}, time::Instant};
 use keepass::{Database, DatabaseKey, db::fields};
 use thiserror::Error;
@@ -12,12 +11,15 @@ use crate::entry::Entry;
 pub enum LayerError<'a> {
     #[error("Layer \"{name}\" is closed. Please open it and try again.")]
     LayerClosed{ name: &'a str },
+    #[error("Cannot access Database file at \"{path}\" to {operation}")]
+    DbUnreachable{ path: &'a str, operation: &'a str },
 }
 
 impl<'a> From<LayerError<'a>> for IpcError {
     fn from(err: LayerError) -> Self {
         match &err {
             LayerError::LayerClosed {..} => IpcError::Unauthorized(err.to_string()),
+            LayerError::DbUnreachable {..} => IpcError::OperationFailed(err.to_string()),
         }
     }
 }
@@ -80,7 +82,7 @@ impl Layer {
         Ok(())
     }
 
-    pub fn add_entry(&mut self, entry: Entry) -> Result<(), LayerError> {
+    pub fn add_entry(&mut self, entry: Entry) -> Result<(), LayerError<'_>> {
         match &mut self.state {
             LayerState::Open { db, .. } => {
                 let mut root = db.root_mut();
@@ -107,13 +109,20 @@ impl Layer {
         }
     }
 
-    pub fn save(&mut self) -> Result<(), LayerError> {
+    pub fn save(&mut self) -> Result<(), LayerError<'_>> {
         match &mut self.state {
             LayerState::Open { db, key, .. } => {
                 db.save(
-                    &mut File::open(&self.path).unwrap(),
+                    &mut File::open(&self.path)
+                        .map_err(|_| LayerError::DbUnreachable {
+                            path: &self.path.to_str().unwrap_or("Path contained invalid unicode"),
+                            operation: "save",
+                        })?,
                     key.clone(),
-                );
+                ).map_err(|_| LayerError::DbUnreachable { // TODO: Add better error handling
+                        path: &self.path.to_str().unwrap_or("Path contained invalid unicode"),
+                        operation: "save"
+                    })?;
                 Ok(())
             },
             LayerState::Closed => Err(LayerError::LayerClosed { name: &self.name }),
