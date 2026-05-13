@@ -12,6 +12,8 @@ use std::{
 
 mod config;
 mod command;
+mod entry;
+
 mod layer;
 use layer::Layer;
 

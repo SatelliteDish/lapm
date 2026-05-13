@@ -5,12 +5,17 @@ use interprocess::local_socket::{
     },
     ListenerOptions,
 };
+use keepass::db::fields;
 use lapm_core::{
     IpcError, IpcMessage, DaemonCommand, DaemonLayerCommand, LayerInfo, ListLayersResponse, DaemonEntryCommand,
 };
 use std::sync::{Arc,Mutex};
 
-use crate::App;
+use crate::{
+    App,
+    layer::LayerState,
+    entry::Entry,
+};
 
 pub async fn handle_commands(app: Arc<Mutex<App>>) -> Result<(), String> {
     let sock_name = lapm_core::stream::get_connection_name()?;
@@ -92,12 +97,19 @@ async fn execute_entry_command(app: Arc<Mutex<App>>, command: DaemonEntryCommand
 
     match command {
         DaemonEntryCommand::Add { name, password, layer } => {
-            if let Some(lyr) = state.config.layers.iter().find(|lyr| lyr.name.as_str() == layer.as_str()) {
-
-                todo!()
+            let found = state.config.layers.iter_mut()
+                .find(|lyr| lyr.name.as_str() == layer.as_str());
+            if let Some(layer) = found {
+                IpcMessage(
+                layer.add_entry(Entry::new(name, password))
+                    .map_err(|e| IpcError::from(e))
+                ).send(stream).await
             } else {
-                todo!()
+                IpcMessage::<()>::from_err(
+                    IpcError::NotFound(format!("Could not find Layer \"{layer}\""))
+                ).send(stream).await
             }
+
         }
-    }
+    }.map_err(|e| e.into())
 }

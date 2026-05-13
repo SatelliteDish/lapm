@@ -1,7 +1,26 @@
 use chrono::TimeDelta;
-use lapm_core::LayerInfo;
+use lapm_core::{IpcError, LayerInfo};
+use postcard::fixint::le;
 use std::{fs::File, path::{Path,PathBuf}, time::Instant};
-use keepass::{Database, DatabaseKey};
+use keepass::{Database, DatabaseKey, db::fields};
+use thiserror::Error;
+
+use crate::entry::Entry;
+
+
+#[derive(Debug,Clone,Error)]
+pub enum LayerError<'a> {
+    #[error("Layer \"{name}\" is closed. Please open it and try again.")]
+    LayerClosed{ name: &'a str },
+}
+
+impl<'a> From<LayerError<'a>> for IpcError {
+    fn from(err: LayerError) -> Self {
+        match &err {
+            LayerError::LayerClosed {..} => IpcError::Unauthorized(err.to_string()),
+        }
+    }
+}
 
 #[derive(Debug,Clone)]
 pub struct Layer {
@@ -15,7 +34,8 @@ impl Layer {
         let mut db = Database::new();
         db.meta.database_name = Some(name.clone());
 
-        let layer = Self {
+        let key = DatabaseKey::new().with_password(&password);
+        let mut layer = Self {
             path: dir.join(format!("{name}.kbdx")).to_path_buf(),
             name,
             state: LayerState::Open {
@@ -23,25 +43,13 @@ impl Layer {
                 timeout: TimeDelta::new(10, 10).unwrap(),
                 last_used: Instant::now(),
                 db,
+                key,
             },
         };
-        layer.save(&password)?;
+        layer.save()
+            .map_err(|e| e.to_string())?;
 
         Ok(layer)
-    }
-
-    pub fn save(&self, password: &str) -> Result<(),String> {
-        match &self.state {
-            LayerState::Closed => Err("Cannot save closed vault".to_string()),
-            LayerState::Open { public_usernames, timeout, last_used, db } => {
-                println!("Saving");
-                db.save(
-                    &mut File::create(&self.path)
-                        .map_err(|e| e.to_string())?,
-                    DatabaseKey::new().with_password(password),
-                ).map_err(|e| e.to_string())
-            },
-        }
     }
 
     pub fn is_open(&self) -> bool {
@@ -59,7 +67,7 @@ impl Layer {
         let mut file = File::open(&self.path)
             .map_err(|e| e.to_string())?;
         let key = DatabaseKey::new().with_password(password);
-        let db = Database::open(&mut file, key)
+        let db = Database::open(&mut file, key.clone())
             .map_err(|e| e.to_string())?;
 
         self.state = LayerState::Open {
@@ -67,8 +75,49 @@ impl Layer {
             timeout: TimeDelta::new(10,10).unwrap(),
             last_used: Instant::now(),
             db,
+            key,
         };
         Ok(())
+    }
+
+    pub fn add_entry(&mut self, entry: Entry) -> Result<(), LayerError> {
+        match &mut self.state {
+            LayerState::Open { db, .. } => {
+                let mut root = db.root_mut();
+                let mut inserted = root.add_entry();
+
+                inserted.set_unprotected(fields::USERNAME, &entry.username);
+                inserted.set_unprotected(fields::PASSWORD, &entry.password);
+
+                if let Some(title) = entry.title {
+                    inserted.set_unprotected(fields::TITLE, &title);
+                }
+                if let Some(url) = entry.url {
+                    inserted.set_unprotected(fields::URL, &url);
+                }
+                if let Some(notes) = entry.notes {
+                    inserted.set_unprotected(fields::NOTES, &notes);
+                }
+
+
+                self.save()?;
+                Ok(())
+            },
+            LayerState::Closed => Err(LayerError::LayerClosed { name: &self.name }),
+        }
+    }
+
+    pub fn save(&mut self) -> Result<(), LayerError> {
+        match &mut self.state {
+            LayerState::Open { db, key, .. } => {
+                db.save(
+                    &mut File::open(&self.path).unwrap(),
+                    key.clone(),
+                );
+                Ok(())
+            },
+            LayerState::Closed => Err(LayerError::LayerClosed { name: &self.name }),
+        }
     }
 }
 
@@ -92,5 +141,6 @@ pub enum LayerState {
         timeout: TimeDelta,
         last_used: Instant,
         db: Database,
+        key: DatabaseKey,
     },
 }
