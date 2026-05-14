@@ -28,6 +28,7 @@ pub enum DaemonEntryCommand {
         password: String,
         layer: String,
     },
+    List,
 }
 
 #[derive(Debug,Serialize,Deserialize,Clone)]

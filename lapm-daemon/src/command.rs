@@ -109,7 +109,9 @@ async fn execute_entry_command(app: Arc<Mutex<App>>, command: DaemonEntryCommand
                     IpcError::NotFound(format!("Could not find Layer \"{layer}\""))
                 ).send(stream).await
             }
-
-        }
+        },
+        DaemonEntryCommand::List => {
+            todo!()
+        },
     }.map_err(|e| e.into())
 }

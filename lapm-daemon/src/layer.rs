@@ -128,6 +128,27 @@ impl Layer {
             LayerState::Closed => Err(LayerError::LayerClosed { name: &self.name }),
         }
     }
+
+    pub fn get_entries(&self) -> Result<Vec<Entry>, LayerError<'_>> {
+        match &self.state {
+            LayerState::Open { db, .. } => {
+                let root = db.root();
+                Ok(
+                    root.entries()
+                        .map(|ent| Entry {
+                            title: ent.get(fields::TITLE).map(|ttl| ttl.to_string()),
+                            username: ent.get(fields::USERNAME).unwrap().to_string(),
+                            password: ent.get(fields::PASSWORD).unwrap().to_string(),
+                            url: ent.get(fields::URL).map(|url| url.to_string()),
+                            notes: ent.get(fields::NOTES).map(|nt| nt.to_string()),
+                        }).collect::<Vec<_>>()
+
+                )
+            },
+            LayerState::Closed => Err(LayerError::LayerClosed { name: &self.name }),
+        }
+
+    }
 }
 
 impl From<Layer> for LayerInfo {
@@ -136,7 +157,9 @@ impl From<Layer> for LayerInfo {
 
         Self {
             name: layer.name,
-            path: layer.path.to_str().unwrap().to_string(),
+            path: layer.path.to_str()
+                .unwrap_or("Path contained invalid unicode")
+                .to_string(),
             open: is_open,
         }
     }
