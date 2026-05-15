@@ -21,3 +21,4 @@ I have lots of future plans for this project. I may not get to all these, but wh
 - Upload to crates.io
 - Create a GUI
 - Add more layer configuration
+- Add unit tests
