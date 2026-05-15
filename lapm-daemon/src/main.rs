@@ -1,5 +1,6 @@
 use directories::ProjectDirs;
 use tokio_util::sync::CancellationToken;
+use arboard::Clipboard;
 use std::{
     path::{Path, PathBuf},
     time::Duration,
@@ -16,6 +17,7 @@ use layer::Layer;
 struct App {
     work_dir: PathBuf,
     config: config::AppConfig,
+    clipboard: Clipboard,
 }
 
 impl App {
@@ -27,7 +29,7 @@ impl App {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), String> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let project_dirs = ProjectDirs::from("com", "lapm", "lapm")
         .ok_or("Could not open project directory".to_string())?;
 
@@ -40,6 +42,7 @@ async fn main() -> Result<(), String> {
         App {
             config: conf,
             work_dir: conf_dir.to_path_buf(),
+            clipboard: arboard::Clipboard::new()?,
         }
     ));
 

@@ -16,6 +16,8 @@ pub enum IpcError {
     Unauthorized(String),
     #[error("Not Found: {0}")]
     NotFound(String),
+    #[error("Bad Request: {0}")]
+    BadRequest(String),
     #[error("Operation Failed: {0}")]
     OperationFailed(String),
 }

@@ -99,7 +99,10 @@ impl FromIterator<LayerInfoTableRow> for LayerInfoTable {
 }
 
 
-struct EntryTableRow(DaemonEntry);
+struct EntryTableRow {
+    entry: DaemonEntry,
+    show_password: bool,
+}
 
 impl Tabled for EntryTableRow {
     const LENGTH: usize = 5;
@@ -111,12 +114,12 @@ impl Tabled for EntryTableRow {
             password,
             url,
             notes,
-        } = &self.0;
+        } = &self.entry;
 
         vec![
             title.as_deref().unwrap_or_default().into(),
             username.into(),
-            password.into(),
+            if self.show_password { password.into() } else { "********".into() },
             url.as_deref().unwrap_or_default().into(),
             notes.as_deref().unwrap_or_default().into(),
         ]
@@ -135,12 +138,6 @@ impl Tabled for EntryTableRow {
 
 struct EntryTable(Vec<EntryTableRow>);
 
-impl FromIterator<DaemonEntry> for EntryTable {
-    fn from_iter<T: IntoIterator<Item = DaemonEntry>>(iter: T) -> Self {
-        Self(iter.into_iter().map(|ent| EntryTableRow(ent)).collect::<Vec<_>>())
-    }
-}
-
 impl From<EntryTable> for Table {
     fn from(value: EntryTable) -> Self {
         let mut table = Table::new(&value.0);
@@ -157,9 +154,18 @@ enum EntryCommand {
     Add{
         name: String,
         #[arg(short,long)]
-        layer: String
+        layer: String,
+        #[arg(short,long)]
+        url: Option<String>,
     },
-    List,
+    List{
+        #[arg(short,long)]
+        url: Option<String>,
+        #[arg(long, default_value_t = false)]
+        show: bool,
+        #[arg(long, default_value_t = false)]
+        copy: bool,
+    },
 }
 
 
@@ -207,19 +213,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
         CliCommand::Entry { entry } => {
             match entry {
-                EntryCommand::Add { name, layer } => {
+                EntryCommand::Add { name, layer, url } => {
                     let pwd = password::get_and_confirm_password()?;
                     let mut stream = lapm_core::stream::get_connection_stream().await?;
-                    DaemonEntryAddCommand{ name, password: pwd, layer }
+                    DaemonEntryAddCommand {
+                        layer,
+                        entry: DaemonEntry {
+                            username: name,
+                            password: pwd,
+                            url,
+                            notes: None,
+                            title: None,
+                        },
+                    }
                         .send(&mut stream).await?;
                     Ok(())
                 },
-                EntryCommand::List => {
+                EntryCommand::List{ url, show, copy } => {
                     let mut stream = lapm_core::stream::get_connection_stream().await?;
-                    let entries = DaemonEntryListCommand{}
+                    let entries = DaemonEntryListCommand{ url, copy }
                         .send(&mut stream).await?;
-                    let table = entries.into_iter().collect::<EntryTable>();
-                    println!("{}", Table::from(table));
+
+                    if !copy || show {
+                        let table = EntryTable(
+                            entries.into_iter().map(|ent| EntryTableRow {
+                                entry: ent,
+                                show_password: show,
+                            }).collect::<Vec<_>>(),
+                        );
+                        println!("{}", Table::from(table));
+                    }
                     Ok(())
                 }
             }

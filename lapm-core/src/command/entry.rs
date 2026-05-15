@@ -11,10 +11,9 @@ pub enum DaemonEntryCommand {
 }
 
 #[derive(Debug,Clone,Serialize,Deserialize)]
-pub struct DaemonEntryAddCommand {
-    pub name: String,
-    pub password: String,
+pub struct DaemonEntryAddCommand{
     pub layer: String,
+    pub entry: DaemonEntry,
 }
 
 impl IpcCommand for DaemonEntryAddCommand {
@@ -51,7 +50,10 @@ impl DaemonEntry {
 pub type DaemonEntryListResponse = Vec<DaemonEntry>;
 
 #[derive(Debug,Clone,Serialize,Deserialize)]
-pub struct DaemonEntryListCommand {}
+pub struct DaemonEntryListCommand {
+    pub url: Option<String>,
+    pub copy: bool,
+}
 
 impl IpcCommand for DaemonEntryListCommand {
     type Success = DaemonEntryListResponse;

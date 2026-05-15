@@ -10,7 +10,8 @@ use lapm_core::{
         DaemonCommand,
         entry::{
             DaemonEntryAddCommand,
-            DaemonEntryCommand, DaemonEntryListCommand,
+            DaemonEntryCommand,
+            DaemonEntryListCommand,
         },
         layer::{
             DaemonLayerAddCommand,
@@ -22,11 +23,10 @@ use lapm_core::{
         },
     }, stream
 };
-use std::sync::{Arc,Mutex};
+use std::{sync::{Arc,Mutex}};
 
 use crate::{
     App,
-    entry::Entry,
 };
 
 pub async fn handle_commands(app: Arc<Mutex<App>>) -> Result<(), String> {
@@ -108,12 +108,12 @@ async fn execute_entry_command(app: Arc<Mutex<App>>, command: DaemonEntryCommand
 
     match command {
         DaemonEntryCommand::Add(cmd)  => {
-            let DaemonEntryAddCommand{ name, password, layer } = cmd;
+            let DaemonEntryAddCommand{ entry, layer } = cmd;
             let found = state.config.layers.iter_mut()
                 .find(|lyr| lyr.name.as_str() == layer.as_str());
             if let Some(layer) = found {
                 DaemonEntryAddCommand::respond(
-                    layer.add_entry(Entry::new(name, password))
+                    layer.add_entry(entry.into())
                         .map_err(|e| {
                             eprint!("{e}");
                             IpcError::from(e)
@@ -127,12 +127,35 @@ async fn execute_entry_command(app: Arc<Mutex<App>>, command: DaemonEntryCommand
                 ).await
             }
         },
-        DaemonEntryCommand::List(_) => {
-            let entries = state.config.layers
+        DaemonEntryCommand::List(cmd) => {
+            let DaemonEntryListCommand { url, copy } = cmd;
+            let mut entries = state.config.layers
                 .iter().filter_map(|lyr| { // Filter out closed layers
                     lyr.get_entries().ok() // Map to each layer's entries
                 }).flatten() // Flatten entry iters to one iter
                 .collect::<Vec<_>>();
+
+            if let Some(url) = url {
+                entries = entries.into_iter()
+                    .filter(|ent| ent.url.as_deref() == Some(url.as_str()))
+                    .collect::<Vec<_>>();
+            }
+
+            if copy {
+                match entries.len() {
+                    0 => return DaemonEntryListCommand::respond_err(
+                        IpcError::NotFound("No matching entries found, nothing was copied".to_string()),
+                        stream,
+                    ).await.map_err(|e| e.into()),
+                    1 => state.clipboard.set_text(&entries[0].password)?,
+                    _ => return DaemonEntryListCommand::respond_err(
+                        IpcError::BadRequest("More than one match for query. Nothing copied, please be more specific".to_string()),
+                        stream,
+                    ).await.map_err(|e| e.into()),
+                }
+            }
+
+
             DaemonEntryListCommand::respond_ok(entries,stream).await
         },
     }.map_err(|e| e.into())
