@@ -6,7 +6,24 @@ use interprocess::local_socket::{
     ListenerOptions,
 };
 use lapm_core::{
-    DaemonCommand, DaemonEntryAddCommand, DaemonEntryCommand, DaemonLayerAddCommand, DaemonLayerCommand, DaemonLayerListCommand, DaemonLayerOpenCommand, IpcError, LayerInfo, ListLayersResponse, stream::{self, IpcCommand as _}
+    command::{
+        DaemonCommand,
+        entry::{
+            DaemonEntryAddCommand,
+            DaemonEntryCommand,
+        },
+        layer::{
+            DaemonLayerAddCommand,
+            DaemonLayerCommand,
+            DaemonLayerListCommand,
+            DaemonLayerOpenCommand,
+            LayerInfo,
+            ListLayersResponse,
+        },
+    },
+    IpcError,
+    IpcCommand as _,
+    stream,
 };
 use std::sync::{Arc,Mutex};
 

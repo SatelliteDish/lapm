@@ -1,9 +1,15 @@
 use lapm_core::{
-    DaemonLayerAddCommand,
-    DaemonLayerListCommand,
-    DaemonLayerOpenCommand,
-    DaemonEntryAddCommand,
-    LayerInfo,
+    command::{
+        layer::{
+            DaemonLayerAddCommand,
+            DaemonLayerListCommand,
+            DaemonLayerOpenCommand,
+            LayerInfo,
+        },
+        entry::{
+            DaemonEntryAddCommand,
+        },
+    },
     stream::IpcCommand as _,
 };
 use clap::{Parser,Subcommand};
@@ -117,7 +123,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     // Open stream AFTER password is received
                     let mut stream = lapm_core::stream::get_connection_stream().await?;
                     DaemonLayerAddCommand{ name, password }
-                            .send(&mut stream).await?;
+                        .send(&mut stream).await?;
                     Ok(())
                 },
                 LayerCommand::List => {

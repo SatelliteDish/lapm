@@ -7,7 +7,7 @@ use interprocess::local_socket::{
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use thiserror::Error;
 
-use crate::DaemonCommand;
+use crate::command::DaemonCommand;
 
 
 #[derive(Debug, Serialize, Deserialize, Error)]

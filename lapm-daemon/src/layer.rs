@@ -1,5 +1,5 @@
 use chrono::TimeDelta;
-use lapm_core::{IpcError, LayerInfo};
+use lapm_core::{IpcError, command::layer::LayerInfo};
 use std::{fs::File, path::{Path,PathBuf}, time::Instant};
 use keepass::{Database, DatabaseKey, db::fields};
 use thiserror::Error;
