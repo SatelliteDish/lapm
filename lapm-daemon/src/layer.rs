@@ -44,7 +44,7 @@ impl Layer {
 
         let key = DatabaseKey::new().with_password(&password);
         let mut layer = Self {
-            path: dir.join(format!("{name}.kbdx")).to_path_buf(),
+            path: dir.join(format!("{name}.kdbx")).to_path_buf(),
             name,
             state: LayerState::Open {
                 public_usernames: false,
@@ -119,16 +119,20 @@ impl Layer {
         match &mut self.state {
             LayerState::Open { db, key, .. } => {
                 db.save(
-                    &mut File::open(&self.path)
-                        .map_err(|_| LayerError::DbUnreachable {
-                            path: &self.path.to_str().unwrap_or("Path contained invalid unicode"),
-                            operation: "save",
-                        })?,
+                    &mut File::create(&self.path)
+                        .map_err(|e| {
+                            eprint!("{e}");
+                            LayerError::DbUnreachable {
+                                path: &self.path.to_str().unwrap_or("Path contained invalid unicode"),
+                                operation: "save",
+                            }})?,
                     key.clone(),
-                ).map_err(|_| LayerError::DbUnreachable { // TODO: Add better error handling
-                        path: &self.path.to_str().unwrap_or("Path contained invalid unicode"),
-                        operation: "save"
-                    })?;
+                ).map_err(|e| {
+                        eprint!("{e}");
+                        LayerError::DbUnreachable { // TODO: Add better error handling
+                            path: &self.path.to_str().unwrap_or("Path contained invalid unicode"),
+                            operation: "save"
+                        }})?;
                 Ok(())
             },
             LayerState::Closed => Err(LayerError::LayerClosed { name: &self.name }),

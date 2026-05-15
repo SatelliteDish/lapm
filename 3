@@ -143,7 +143,12 @@ impl FromIterator<DaemonEntry> for EntryTable {
 
 impl From<EntryTable> for Table {
     fn from(value: EntryTable) -> Self {
-        let mut table = Table::new(&value.0);
+        let mut table = Table::new(&value.layers);
+        for (i, layer) in value.layers.iter().enumerate() {
+            let color = if layer.0.open { Color::FG_GREEN } else { Color::FG_RED };
+            table.with(Modify::new(Rows::one(i + 1)).with(color));
+        }
+
         table
             .with(Style::modern())
             .with(Modify::new(Columns::last()).with(Width::increase(13)));

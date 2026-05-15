@@ -114,7 +114,10 @@ async fn execute_entry_command(app: Arc<Mutex<App>>, command: DaemonEntryCommand
             if let Some(layer) = found {
                 DaemonEntryAddCommand::respond(
                     layer.add_entry(Entry::new(name, password))
-                        .map_err(|e| IpcError::from(e)),
+                        .map_err(|e| {
+                            eprint!("{e}");
+                            IpcError::from(e)
+                        }),
                     stream,
                 ).await
             } else {
