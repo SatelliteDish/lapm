@@ -6,7 +6,7 @@ use lapm_core::{
     },
 };
 use std::{fs::File, path::{Path,PathBuf}, time::{Duration, Instant}};
-use keepass::{Database, DatabaseKey, db::fields};
+use keepass::{Database, DatabaseKey, db::{fields}};
 use thiserror::Error;
 
 use crate::entry::Entry;
@@ -37,9 +37,17 @@ pub struct Layer {
 }
 
 impl Layer {
-    pub fn create(name: String, dir: &Path, password: String) -> Result<Self,String> {
+    pub async fn create(name: String, dir: &Path, password: String, timeout: Option<u64>) -> Result<Self,String> {
         let mut db = Database::new();
         db.meta.database_name = Some(name.clone());
+        let mut db_root = db.root_mut();
+        let mut config_group = db_root.add_group();
+        config_group.name = "__config__".to_string();
+        if let Some(tout) = timeout {
+            let mut timeout_entry = config_group.add_entry();
+            timeout_entry.set_unprotected(fields::TITLE, "timeout");
+            timeout_entry.set_unprotected("value", tout.to_string());
+        }
 
         let key = DatabaseKey::new().with_password(&password);
         let mut layer = Self {
@@ -47,7 +55,7 @@ impl Layer {
             name,
             state: LayerState::Open {
                 public_usernames: false,
-                timeout: Duration::new(60, 0),
+                timeout: timeout.map(|tout| Duration::new(tout, 0)),
                 last_used: Instant::now(),
                 db,
                 key,
@@ -76,10 +84,22 @@ impl Layer {
         let key = DatabaseKey::new().with_password(password);
         let db = Database::open(&mut file, key.clone())
             .map_err(|e| e.to_string())?;
+        let db_root = db.root();
+        let config_group = db_root.group_by_name("__config__")
+            .ok_or("Vault has no config")?;
+        let timeout_entry = config_group.entry_by_name("timeout");
+        let timeout = if let Some(tent) = timeout_entry {
+            let value = tent.get("value");
+            if let Some(tout) = value {
+                Some(tout.parse::<u64>().map_err(|e| e.to_string())?)
+            } else {
+                None
+            }
+        } else { None };
 
         self.state = LayerState::Open {
             public_usernames: false,
-            timeout: Duration::new(60, 0),
+            timeout: timeout.map(|tout| Duration::new(tout, 0)),
             last_used: Instant::now(),
             db,
             key,
@@ -183,7 +203,7 @@ pub enum LayerState {
     Closed,
     Open{
         public_usernames: bool,
-        timeout: Duration,
+        timeout: Option<Duration>,
         last_used: Instant,
         db: Database,
         key: DatabaseKey,

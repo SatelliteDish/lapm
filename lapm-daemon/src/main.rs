@@ -19,8 +19,8 @@ struct App {
 }
 
 impl App {
-    pub fn add_layer(&mut self, name: String, password: String) -> Result<(), String> {
-        let layer = Layer::create(name, &self.work_dir, password)?;
+    pub async fn add_layer(&mut self, name: String, password: String, timeout: Option<u64>) -> Result<(), String> {
+        let layer = Layer::create(name, &self.work_dir, password, timeout).await?;
         self.config.layers.push(layer);
         config::write_config(&self.work_dir, &self.config)
     }
@@ -66,8 +66,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let now = Instant::now();
                     for layer in state.config.layers.iter_mut() {
                         if let LayerState::Open { last_used, timeout, .. } = layer.state {
-                            if last_used + timeout < now {
-                                layer.close();
+                            if let Some(tout) = timeout {
+
+                                if last_used + tout < now {
+                                    layer.close();
+                                }
                             }
                         }
                     }
@@ -76,8 +79,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Ok::<_, String>(())
     }).await?;
-
-    println!("Cleanup!");
     Ok(())
 }
 

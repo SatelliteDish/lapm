@@ -11,7 +11,7 @@ use lapm_core::{
     },
     stream::IpcCommand as _,
 };
-use clap::{Parser,Subcommand};
+use clap::{Parser,Subcommand,Args};
 use tabled::{Table, Tabled, settings::{Color, Modify, Style, Width, object::{Columns,Rows}}};
 
 mod password;
@@ -37,10 +37,28 @@ enum CliCommand {
     },
 }
 
+#[derive(Args, Clone)]
+#[group(required = true, multiple = false)]
+struct TimeoutArg {
+    #[arg(long, value_name = "SECONDS")]
+    timeout: Option<u64>,
+    #[arg(long, value_name = "MINUTES")]
+    timeout_m: Option<u64>,
+    #[arg(long, value_name = "HOURS")]
+    timeout_h: Option<u64>,
+    #[arg(long)]
+    no_timeout: bool,
+}
+
+
 #[derive(Subcommand, Clone)]
 #[command(version, about, long_about = None)]
 enum LayerCommand {
-    Add{ name: String },
+    Add{
+        name: String,
+        #[command(flatten)]
+        timeout: TimeoutArg,
+    },
     List,
     Open{ name: String },
 }
@@ -176,12 +194,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     match args.command {
         CliCommand::Layer{ layer } => {
             match layer {
-                LayerCommand::Add{ name } => {
+                LayerCommand::Add{ name, timeout } => {
                     let password = password::get_and_confirm_password()?;
+                    let timeout = if timeout.no_timeout {
+                        None
+                    } else {
+                        timeout.timeout
+                            .or(timeout.timeout_m.map(|tout| tout * 60))
+                            .or(timeout.timeout_h.map(|tout| tout * 3600))
+                    };
 
                     // Open stream AFTER password is received
                     let mut stream = lapm_core::stream::get_connection_stream().await?;
-                    DaemonLayerAddCommand{ name, password }
+                    DaemonLayerAddCommand{ name, password, timeout }
                         .send(&mut stream).await?;
                     Ok(())
                 },

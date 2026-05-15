@@ -66,8 +66,8 @@ async fn execute_layer_command(app: Arc<Mutex<App>>, command: DaemonLayerCommand
         .map_err(|e| e.to_string())?;
     match command {
         DaemonLayerCommand::Add(cmd) => {
-            let DaemonLayerAddCommand { name, password } = cmd;
-            let add_res = state.add_layer(name, password)
+            let DaemonLayerAddCommand { name, password, timeout } = cmd;
+            let add_res = state.add_layer(name, password, timeout).await
                 .map_err(|e| IpcError::Unauthorized(e));
             DaemonLayerAddCommand::respond(add_res, stream).await
         },

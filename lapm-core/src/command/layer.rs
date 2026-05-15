@@ -15,6 +15,7 @@ pub enum DaemonLayerCommand {
 pub struct DaemonLayerAddCommand {
     pub name: String,
     pub password: String,
+    pub timeout: Option<u64>,
 }
 
 impl IpcCommand for DaemonLayerAddCommand {
