@@ -130,33 +130,40 @@ async fn execute_entry_command(app: Arc<Mutex<App>>, command: DaemonEntryCommand
         DaemonEntryCommand::List(cmd) => {
             let DaemonEntryListCommand { url, copy } = cmd;
             let mut entries = state.config.layers
-                .iter().filter_map(|lyr| { // Filter out closed layers
-                    lyr.get_entries().ok() // Map to each layer's entries
-                }).flatten() // Flatten entry iters to one iter
+                .iter().filter_map(|lyr| {
+                    lyr.get_entries().ok()
+                }).flatten()
                 .collect::<Vec<_>>();
-
             if let Some(url) = url {
                 entries = entries.into_iter()
                     .filter(|ent| ent.url.as_deref() == Some(url.as_str()))
                     .collect::<Vec<_>>();
             }
-
             if copy {
                 match entries.len() {
                     0 => return DaemonEntryListCommand::respond_err(
                         IpcError::NotFound("No matching entries found, nothing was copied".to_string()),
                         stream,
                     ).await.map_err(|e| e.into()),
-                    1 => state.clipboard.set_text(&entries[0].password)?,
+                    1 => {
+                        let password = entries[0].password.clone();
+                        tokio::task::spawn_blocking(move || {
+                            let mut clipboard = arboard::Clipboard::new()?;
+                            clipboard.set_text(&password)?;
+                            std::thread::sleep(std::time::Duration::from_secs(10));
+                            if clipboard.get_text().ok().as_deref() == Some(&password) {
+                                let _ = clipboard.set_text("");
+                            }
+                            Ok::<_, arboard::Error>(())
+                        });
+                    },
                     _ => return DaemonEntryListCommand::respond_err(
                         IpcError::BadRequest("More than one match for query. Nothing copied, please be more specific".to_string()),
                         stream,
                     ).await.map_err(|e| e.into()),
                 }
             }
-
-
-            DaemonEntryListCommand::respond_ok(entries,stream).await
+            DaemonEntryListCommand::respond_ok(entries, stream).await
         },
     }.map_err(|e| e.into())
 }
