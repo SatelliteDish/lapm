@@ -2,10 +2,7 @@ use serde::{Serialize,Deserialize};
 use derive_more::From;
 
 use super::DaemonCommand;
-use crate::{
-    IpcCommand,
-    IpcError,
-};
+use crate::IpcCommand;
 
 #[derive(Debug, Serialize, Deserialize, From)]
 pub enum DaemonEntryCommand {
@@ -22,8 +19,9 @@ pub struct DaemonEntryAddCommand {
 
 impl IpcCommand for DaemonEntryAddCommand {
     type Success = ();
+    type Envelope = DaemonCommand;
 
-    fn into_envelope(self) -> DaemonCommand {
+    fn into_envelope(self) -> Self::Envelope {
         DaemonEntryCommand::from(self).into()
     }
 }
@@ -34,8 +32,9 @@ pub struct DaemonEntryListCommand {}
 
 impl IpcCommand for DaemonEntryListCommand {
     type Success = ();
+    type Envelope = DaemonCommand;
 
-    fn into_envelope(self) -> DaemonCommand {
+    fn into_envelope(self) -> Self::Envelope {
         DaemonEntryCommand::from(self).into()
     }
 }

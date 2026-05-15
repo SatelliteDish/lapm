@@ -2,10 +2,7 @@ use serde::{Serialize,Deserialize};
 use derive_more::From;
 
 use super::DaemonCommand;
-use crate::{
-    IpcCommand,
-    IpcError,
-};
+use crate::IpcCommand;
 
 #[derive(Debug, Serialize, Deserialize, From)]
 pub enum DaemonLayerCommand {
@@ -22,8 +19,9 @@ pub struct DaemonLayerAddCommand {
 
 impl IpcCommand for DaemonLayerAddCommand {
     type Success = ();
+    type Envelope = DaemonCommand;
 
-    fn into_envelope(self) -> DaemonCommand {
+    fn into_envelope(self) -> Self::Envelope {
         DaemonLayerCommand::from(self).into()
     }
 }
@@ -45,8 +43,9 @@ pub struct DaemonLayerListCommand {}
 
 impl IpcCommand for DaemonLayerListCommand {
     type Success = ListLayersResponse;
+    type Envelope = DaemonCommand;
 
-    fn into_envelope(self) -> DaemonCommand {
+    fn into_envelope(self) -> Self::Envelope {
         DaemonLayerCommand::from(self).into()
     }
 }
@@ -59,8 +58,9 @@ pub struct DaemonLayerOpenCommand {
 
 impl IpcCommand for DaemonLayerOpenCommand {
     type Success = ();
+    type Envelope = DaemonCommand;
 
-    fn into_envelope(self) -> DaemonCommand {
+    fn into_envelope(self) -> Self::Envelope {
         DaemonLayerCommand::from(self).into()
     }
 }

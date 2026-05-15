@@ -76,8 +76,9 @@ pub async fn receive<R: for<'de> Deserialize<'de>>(stream: &mut Stream) -> Resul
 
 pub trait IpcCommand: Sized + Serialize + for<'de> Deserialize<'de> {
     type Success: Sized + Serialize + for<'de> Deserialize<'de>;
+    type Envelope: Sized + Serialize + for<'de> Deserialize<'de>;
 
-    fn into_envelope(self) -> DaemonCommand;
+    fn into_envelope(self) -> Self::Envelope;
 
     async fn send(self, stream: &mut Stream) -> Result<Self::Success, StreamError> {
         let bytes = to_bytes(&self.into_envelope())?;
