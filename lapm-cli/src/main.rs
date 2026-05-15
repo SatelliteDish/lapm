@@ -1,4 +1,11 @@
-use lapm_core::{IpcMessage, DaemonCommand, DaemonLayerCommand, LayerInfo, ListLayersResponse, DaemonEntryCommand};
+use lapm_core::{
+    DaemonLayerAddCommand,
+    DaemonLayerListCommand,
+    DaemonLayerOpenCommand,
+    DaemonEntryAddCommand,
+    LayerInfo,
+    stream::IpcCommand as _,
+};
 use clap::{Parser,Subcommand};
 use tabled::{Table, Tabled, settings::{Color, Modify, Style, Width, object::{Columns,Rows}}};
 
@@ -109,15 +116,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                     // Open stream AFTER password is received
                     let mut stream = lapm_core::stream::get_connection_stream().await?;
-                    let command = DaemonCommand::Layer(
-                        DaemonLayerCommand::Add{ name, password },
-                    );
-                    IpcMessage::from_ok(command).request_empty(&mut stream).await?;
+                    DaemonLayerAddCommand{ name, password }
+                            .send(&mut stream).await?;
                     Ok(())
                 },
                 LayerCommand::List => {
                     let mut stream = lapm_core::stream::get_connection_stream().await?;
-                    let res = IpcMessage::from_ok(DaemonCommand::Layer(DaemonLayerCommand::List)).request::<ListLayersResponse>(&mut stream).await?;
+                    let res = DaemonLayerListCommand{}
+                        .send(&mut stream).await?;
                     let table = res.layers.into_iter()
                         .map(|lyr| LayerInfoTableRow::from(lyr))
                         .collect::<LayerInfoTable>();
@@ -133,9 +139,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                     // Open stream AFTER password is received
                     let mut stream = lapm_core::stream::get_connection_stream().await?;
-                    IpcMessage::from_ok(DaemonCommand::Layer(
-                        DaemonLayerCommand::Open { name, password }
-                    )).request_empty(&mut stream).await?;
+                    DaemonLayerOpenCommand{ name, password }
+                        .send(&mut stream).await?;
 
                     Ok(())
                 }
@@ -146,11 +151,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 EntryCommand::Add { name, layer } => {
                     let pwd = password::get_and_confirm_password()?;
                     let mut stream = lapm_core::stream::get_connection_stream().await?;
-                    IpcMessage::from_ok(
-                        DaemonCommand::Entry(
-                            DaemonEntryCommand::Add { name, password: pwd, layer }
-                        )
-                    ).request_empty(&mut stream).await?;
+                    DaemonEntryAddCommand{ name, password: pwd, layer }
+                        .send(&mut stream).await?;
                     Ok(())
                 }
             }

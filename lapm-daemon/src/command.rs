@@ -5,15 +5,13 @@ use interprocess::local_socket::{
     },
     ListenerOptions,
 };
-use keepass::db::fields;
 use lapm_core::{
-    IpcError, IpcMessage, DaemonCommand, DaemonLayerCommand, LayerInfo, ListLayersResponse, DaemonEntryCommand,
+    DaemonCommand, DaemonEntryAddCommand, DaemonEntryCommand, DaemonLayerAddCommand, DaemonLayerCommand, DaemonLayerListCommand, DaemonLayerOpenCommand, IpcError, LayerInfo, ListLayersResponse, stream::{self, IpcCommand as _}
 };
 use std::sync::{Arc,Mutex};
 
 use crate::{
     App,
-    layer::LayerState,
     entry::Entry,
 };
 
@@ -28,7 +26,7 @@ pub async fn handle_commands(app: Arc<Mutex<App>>) -> Result<(), String> {
             let mut stream = listener.accept().await.unwrap();
             let app = app.clone();
             tokio::task::spawn_local(async move {
-                match IpcMessage::<DaemonCommand>::receive(&mut stream).await {
+                match stream::receive::<DaemonCommand>(&mut stream).await {
                     Ok(command) => {
                         if let Err(e) = execute_command(app, command, &mut stream).await {
                             eprintln!("{e}");
@@ -53,38 +51,37 @@ async fn execute_layer_command(app: Arc<Mutex<App>>, command: DaemonLayerCommand
     let mut state = app.lock()
         .map_err(|e| e.to_string())?;
     match command {
-        DaemonLayerCommand::Add { name, password } => {
+        DaemonLayerCommand::Add(cmd) => {
+            let DaemonLayerAddCommand { name, password } = cmd;
             let add_res = state.add_layer(name, password)
                 .map_err(|e| IpcError::Unauthorized(e));
-            IpcMessage::from(add_res).send(stream).await
+            DaemonLayerAddCommand::respond(add_res, stream).await
         },
-        DaemonLayerCommand::List => {
+        DaemonLayerCommand::List(_) => {
             let layer_info = state.config.layers.iter()
                 .map(|lyr| LayerInfo::from(lyr.clone()))
                 .collect::<Vec<_>>();
-            IpcMessage::from_ok(
-                ListLayersResponse{ layers: layer_info }
-            )
-                .send(stream).await
+            DaemonLayerListCommand::respond_ok(
+                ListLayersResponse{ layers: layer_info },
+                stream
+            ).await
         },
-        DaemonLayerCommand::Open { name, password } => {
+        DaemonLayerCommand::Open(cmd) => {
+            let DaemonLayerOpenCommand{ name, password } = cmd;
             let layer_opt = state.config.layers.iter_mut()
                 .find(|lyr| lyr.name.as_str() == name.as_str());
 
             if let Some(layer) = layer_opt {
-                IpcMessage(
+                DaemonLayerOpenCommand::respond(
                     layer.open(&password)
-                        .map_err(|e| IpcError::Unauthorized(e))
-                )
-                    .send(stream).await
-                    .map_err(|e| e.into())
+                        .map_err(|e| IpcError::Unauthorized(e)),
+                    stream,
+                ).await
             } else {
-                IpcMessage::<()>::from_err(
-                    IpcError::NotFound(
-                        format!("layer {name} not found")
-                    )
-                )
-                    .send(stream).await
+                DaemonLayerOpenCommand::respond_err(
+                    IpcError::NotFound(format!("layer {name} not found")),
+                    stream,
+                ).await
             }
         },
     }.map_err(|e| e.into())
@@ -96,21 +93,24 @@ async fn execute_entry_command(app: Arc<Mutex<App>>, command: DaemonEntryCommand
         .map_err(|e| e.to_string())?;
 
     match command {
-        DaemonEntryCommand::Add { name, password, layer } => {
+        DaemonEntryCommand::Add(cmd)  => {
+            let DaemonEntryAddCommand{ name, password, layer } = cmd;
             let found = state.config.layers.iter_mut()
                 .find(|lyr| lyr.name.as_str() == layer.as_str());
             if let Some(layer) = found {
-                IpcMessage(
-                layer.add_entry(Entry::new(name, password))
-                    .map_err(|e| IpcError::from(e))
-                ).send(stream).await
+                DaemonEntryAddCommand::respond(
+                    layer.add_entry(Entry::new(name, password))
+                        .map_err(|e| IpcError::from(e)),
+                    stream,
+                ).await
             } else {
-                IpcMessage::<()>::from_err(
-                    IpcError::NotFound(format!("Could not find Layer \"{layer}\""))
-                ).send(stream).await
+                DaemonEntryAddCommand::respond_err(
+                    IpcError::NotFound(format!("Could not find Layer \"{layer}\"")),
+                    stream,
+                ).await
             }
         },
-        DaemonEntryCommand::List => {
+        DaemonEntryCommand::List(_) => {
             todo!()
         },
     }.map_err(|e| e.into())

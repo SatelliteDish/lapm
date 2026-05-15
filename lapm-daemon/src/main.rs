@@ -1,8 +1,4 @@
 use directories::ProjectDirs;
-use keepass::{
-    db::{fields, Database},
-    DatabaseKey,
-};
 use tokio_util::sync::CancellationToken;
 use std::{
     path::{Path, PathBuf},
@@ -27,11 +23,6 @@ impl App {
         let layer = Layer::create(name, &self.work_dir, password)?;
         self.config.layers.push(layer);
         config::write_config(&self.work_dir, &self.config)
-    }
-
-
-    pub fn get_layers(&self) -> Vec<Layer> {
-        todo!()
     }
 }
 
@@ -59,7 +50,6 @@ async fn main() -> Result<(), String> {
     let clone_tkn = canc_tkn.clone();
 
     // Daemon loop
-    let state = root_state.clone();
     loop {
         tokio::select! {
         _ = clone_tkn.cancelled() => {
