@@ -1,4 +1,3 @@
-use chrono::TimeDelta;
 use lapm_core::{
     IpcError,
     command::{
@@ -6,7 +5,7 @@ use lapm_core::{
         entry::DaemonEntry,
     },
 };
-use std::{fs::File, path::{Path,PathBuf}, time::Instant};
+use std::{fs::File, path::{Path,PathBuf}, time::{Duration, Instant}};
 use keepass::{Database, DatabaseKey, db::fields};
 use thiserror::Error;
 
@@ -48,7 +47,7 @@ impl Layer {
             name,
             state: LayerState::Open {
                 public_usernames: false,
-                timeout: TimeDelta::new(10, 10).unwrap(),
+                timeout: Duration::new(60, 0),
                 last_used: Instant::now(),
                 db,
                 key,
@@ -80,12 +79,16 @@ impl Layer {
 
         self.state = LayerState::Open {
             public_usernames: false,
-            timeout: TimeDelta::new(10,10).unwrap(),
+            timeout: Duration::new(60, 0),
             last_used: Instant::now(),
             db,
             key,
         };
         Ok(())
+    }
+
+    pub fn close(&mut self) {
+        self.state = LayerState::Closed;
     }
 
     pub fn add_entry(&mut self, entry: Entry) -> Result<(), LayerError<'_>> {
@@ -180,7 +183,7 @@ pub enum LayerState {
     Closed,
     Open{
         public_usernames: bool,
-        timeout: TimeDelta,
+        timeout: Duration,
         last_used: Instant,
         db: Database,
         key: DatabaseKey,

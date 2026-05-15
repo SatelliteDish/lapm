@@ -3,7 +3,7 @@ use tokio_util::sync::CancellationToken;
 use arboard::Clipboard;
 use std::{
     path::{Path, PathBuf},
-    time::Duration,
+    time::{Duration,Instant},
     sync::{Arc,Mutex},
 };
 
@@ -12,7 +12,7 @@ mod command;
 mod entry;
 
 mod layer;
-use layer::Layer;
+use layer::{Layer,LayerState};
 
 struct App {
     work_dir: PathBuf,
@@ -46,27 +46,39 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     ));
 
-    command::handle_commands(root_state.clone()).await?;
-
     // Setup daemon control
     let canc_tkn = CancellationToken::new();
     let clone_tkn = canc_tkn.clone();
+    let state = root_state.clone();
 
-    // Daemon loop
-    loop {
-        tokio::select! {
-        _ = clone_tkn.cancelled() => {
-            break;
-        }
-            _ = tokio::signal::ctrl_c() => {
-                break;
-            }
-            _ = tokio::time::sleep(Duration::from_secs(1)) => {
-                // Tick
-            }
+    let local = tokio::task::LocalSet::new();
 
+    local.spawn_local(command::handle_commands(root_state.clone()));
+
+    local.run_until(async {
+        let mut interval = tokio::time::interval(Duration::from_secs(1));
+
+        // Daemon loop
+        loop {
+            tokio::select! {
+                _ = clone_tkn.cancelled() => break,
+                    _ = tokio::signal::ctrl_c() => break,
+                    _ = interval.tick() => {
+                    let mut state = state.lock()
+                        .map_err(|e| e.to_string())?;
+                    let now = Instant::now();
+                    for layer in state.config.layers.iter_mut() {
+                        if let LayerState::Open { last_used, timeout, .. } = layer.state {
+                            if last_used + timeout < now {
+                                layer.close();
+                            }
+                        }
+                    }
+                }
+            }
         }
-    }
+        Ok::<_, String>(())
+    }).await?;
 
     println!("Cleanup!");
     Ok(())
