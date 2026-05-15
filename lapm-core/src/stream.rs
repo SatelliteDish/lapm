@@ -7,8 +7,6 @@ use interprocess::local_socket::{
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use thiserror::Error;
 
-use crate::command::DaemonCommand;
-
 
 #[derive(Debug, Serialize, Deserialize, Error)]
 pub enum IpcError {
@@ -76,6 +74,7 @@ pub async fn receive<R: for<'de> Deserialize<'de>>(stream: &mut Stream) -> Resul
     from_bytes::<R>(&buf)
 }
 
+#[allow(async_fn_in_trait)]
 pub trait IpcCommand: Sized + Serialize + for<'de> Deserialize<'de> {
     type Success: Sized + Serialize + for<'de> Deserialize<'de>;
     type Envelope: Sized + Serialize + for<'de> Deserialize<'de>;
