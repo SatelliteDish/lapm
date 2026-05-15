@@ -1,6 +1,5 @@
 use directories::ProjectDirs;
 use tokio_util::sync::CancellationToken;
-use arboard::Clipboard;
 use std::{
     path::{Path, PathBuf},
     time::{Duration,Instant},
@@ -17,7 +16,6 @@ use layer::{Layer,LayerState};
 struct App {
     work_dir: PathBuf,
     config: config::AppConfig,
-    clipboard: Clipboard,
 }
 
 impl App {
@@ -42,7 +40,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         App {
             config: conf,
             work_dir: conf_dir.to_path_buf(),
-            clipboard: arboard::Clipboard::new()?,
         }
     ));
 
