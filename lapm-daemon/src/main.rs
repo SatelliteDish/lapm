@@ -11,7 +11,11 @@ mod command;
 mod entry;
 
 mod layer;
-use layer::{Layer,LayerState};
+use layer::{
+    Layer,
+    LayerState,
+    OpenLayer,
+};
 
 struct App {
     work_dir: PathBuf,
@@ -65,10 +69,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         .map_err(|e| e.to_string())?;
                     let now = Instant::now();
                     for layer in state.config.layers.iter_mut() {
-                        if let LayerState::Open { last_used, timeout, .. } = layer.state {
-                            if let Some(tout) = timeout {
+                        if let LayerState::Open(open) = &layer.state {
+                            let OpenLayer { last_used, config, .. } = open;
+                            if let Some(tout) = config.timeout {
 
-                                if last_used + tout < now {
+                                if *last_used + tout < now {
                                     layer.close();
                                 }
                             }
