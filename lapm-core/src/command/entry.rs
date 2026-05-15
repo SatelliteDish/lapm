@@ -27,11 +27,34 @@ impl IpcCommand for DaemonEntryAddCommand {
 }
 
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DaemonEntry {
+    pub title: Option<String>,
+    pub username: String,
+    pub password: String,
+    pub url: Option<String>,
+    pub notes: Option<String>,
+}
+
+impl DaemonEntry {
+    pub fn new(username: String, password: String) -> Self {
+        Self {
+            title: None,
+            username,
+            password,
+            url: None,
+            notes: None,
+        }
+    }
+}
+
+pub type DaemonEntryListResponse = Vec<DaemonEntry>;
+
 #[derive(Debug,Clone,Serialize,Deserialize)]
 pub struct DaemonEntryListCommand {}
 
 impl IpcCommand for DaemonEntryListCommand {
-    type Success = ();
+    type Success = DaemonEntryListResponse;
     type Envelope = DaemonCommand;
 
     fn into_envelope(self) -> Self::Envelope {

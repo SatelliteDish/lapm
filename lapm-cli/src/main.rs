@@ -1,14 +1,13 @@
 use lapm_core::{
     command::{
-        layer::{
+        entry::{
+            DaemonEntryAddCommand, DaemonEntryListCommand,
+        }, layer::{
             DaemonLayerAddCommand,
             DaemonLayerListCommand,
             DaemonLayerOpenCommand,
             LayerInfo,
-        },
-        entry::{
-            DaemonEntryAddCommand,
-        },
+        }
     },
     stream::IpcCommand as _,
 };
@@ -106,7 +105,8 @@ enum EntryCommand {
         name: String,
         #[arg(short,long)]
         layer: String
-    }
+    },
+    List,
 }
 
 
@@ -159,6 +159,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let mut stream = lapm_core::stream::get_connection_stream().await?;
                     DaemonEntryAddCommand{ name, password: pwd, layer }
                         .send(&mut stream).await?;
+                    Ok(())
+                },
+                EntryCommand::List => {
+                    let mut stream = lapm_core::stream::get_connection_stream().await?;
+                    let entries = DaemonEntryListCommand{}
+                        .send(&mut stream).await?;
+                    println!("{entries:?}");
                     Ok(())
                 }
             }

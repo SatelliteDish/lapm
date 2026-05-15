@@ -1,5 +1,11 @@
 use chrono::TimeDelta;
-use lapm_core::{IpcError, command::layer::LayerInfo};
+use lapm_core::{
+    IpcError,
+    command::{
+        layer::LayerInfo,
+        entry::DaemonEntry,
+    },
+};
 use std::{fs::File, path::{Path,PathBuf}, time::Instant};
 use keepass::{Database, DatabaseKey, db::fields};
 use thiserror::Error;
@@ -129,13 +135,13 @@ impl Layer {
         }
     }
 
-    pub fn get_entries(&self) -> Result<Vec<Entry>, LayerError<'_>> {
+    pub fn get_entries(&self) -> Result<Vec<DaemonEntry>, LayerError<'_>> {
         match &self.state {
             LayerState::Open { db, .. } => {
                 let root = db.root();
                 Ok(
                     root.entries()
-                        .map(|ent| Entry {
+                        .map(|ent| DaemonEntry {
                             title: ent.get(fields::TITLE).map(|ttl| ttl.to_string()),
                             username: ent.get(fields::USERNAME).unwrap().to_string(),
                             password: ent.get(fields::PASSWORD).unwrap().to_string(),

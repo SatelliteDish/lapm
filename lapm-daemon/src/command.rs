@@ -6,11 +6,11 @@ use interprocess::local_socket::{
     ListenerOptions,
 };
 use lapm_core::{
-    command::{
+    IpcCommand as _, IpcError, command::{
         DaemonCommand,
         entry::{
             DaemonEntryAddCommand,
-            DaemonEntryCommand,
+            DaemonEntryCommand, DaemonEntryListCommand,
         },
         layer::{
             DaemonLayerAddCommand,
@@ -20,10 +20,7 @@ use lapm_core::{
             LayerInfo,
             ListLayersResponse,
         },
-    },
-    IpcError,
-    IpcCommand as _,
-    stream,
+    }, stream
 };
 use std::sync::{Arc,Mutex};
 
@@ -128,7 +125,12 @@ async fn execute_entry_command(app: Arc<Mutex<App>>, command: DaemonEntryCommand
             }
         },
         DaemonEntryCommand::List(_) => {
-            todo!()
+            let entries = state.config.layers
+                .iter().filter_map(|lyr| { // Filter out closed layers
+                    lyr.get_entries().ok() // Map to each layer's entries
+                }).flatten() // Flatten entry iters to one iter
+                .collect::<Vec<_>>();
+            DaemonEntryListCommand::respond_ok(entries,stream).await
         },
     }.map_err(|e| e.into())
 }
