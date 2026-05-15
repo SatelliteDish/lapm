@@ -130,7 +130,7 @@ async fn execute_entry_command(app: Arc<Mutex<App>>, command: DaemonEntryCommand
         DaemonEntryCommand::List(cmd) => {
             let DaemonEntryListCommand { url, copy } = cmd;
             let mut entries = state.config.layers
-                .iter().filter_map(|lyr| {
+                .iter_mut().filter_map(|lyr| {
                     lyr.get_entries().ok()
                 }).flatten()
                 .collect::<Vec<_>>();
