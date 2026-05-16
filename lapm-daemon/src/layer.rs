@@ -14,7 +14,10 @@ use keepass::{Database, DatabaseKey, db::{GroupMut, fields}};
 use thiserror::Error;
 use derive_more::From;
 
-use crate::entry::Entry;
+use crate::entry::PasswordEntry;
+
+
+const DEF_TIMEOUT: u64 = 600; // 10 minutes
 
 const CONFIG_GROUP_NAME: &str = "__config__";
 const CONFIG_PUBLIC_USER_KEY: &str = "public_usernames";
@@ -58,6 +61,15 @@ pub struct LayerConfig {
     pub public_usernames: bool,
 }
 
+impl Default for LayerConfig {
+    fn default() -> Self {
+        Self {
+            timeout: Some(Duration::new(DEF_TIMEOUT,0)),
+            public_usernames: false,
+        }
+    }
+}
+
 impl LayerConfig {
     fn get_by_key(conf_group: &mut GroupMut, key: &str) -> Option<String> {
         match &conf_group.entry_by_name_mut(key) {
@@ -84,7 +96,7 @@ impl LayerConfig {
         }
     }
 
-    pub fn set_in_db(self, db: &mut Database) {
+    pub fn set_in_db(&self, db: &mut Database) {
         let mut root = db.root_mut();
         let mut config_group =  match root.group_by_name_mut(CONFIG_GROUP_NAME) {
             Some(gp) => gp,
@@ -152,14 +164,12 @@ impl Layer {
     pub async fn create(name: String, dir: &Path, password: String, timeout: Option<u64>) -> Result<Self,String> {
         let mut db = Database::new();
         db.meta.database_name = Some(name.clone());
-        let mut db_root = db.root_mut();
-        let mut config_group = db_root.add_group();
-        config_group.name = CONFIG_GROUP_NAME.to_string();
-        if let Some(tout) = timeout {
-            let mut timeout_entry = config_group.add_entry();
-            timeout_entry.set_unprotected(fields::TITLE, "timeout");
-            timeout_entry.set_unprotected("value", tout.to_string());
-        }
+
+        let config = LayerConfig {
+            timeout: timeout.map(|tout| Duration::new(tout,0)),
+            ..Default::default()
+        };
+        config.set_in_db(&mut db);
 
         let key = DatabaseKey::new().with_password(&password);
         let mut layer = Self {
@@ -169,10 +179,7 @@ impl Layer {
                 last_used: Instant::now(),
                 db,
                 key,
-                config: LayerConfig {
-                    timeout: timeout.map(|tout| Duration::new(tout, 0)),
-                    public_usernames: false,
-                }
+                config,
             }.into(),
         };
         layer.save()
@@ -274,7 +281,7 @@ impl Layer {
     }
 
     // Entry
-    pub fn add_entry(&mut self, entry: Entry) -> Result<(), LayerError> {
+    pub fn add_entry(&mut self, entry: PasswordEntry) -> Result<(), LayerError> {
         require_open!(self, |mut open| {
             let OpenLayer { db, .. } = open;
             let mut root = db.root_mut();
