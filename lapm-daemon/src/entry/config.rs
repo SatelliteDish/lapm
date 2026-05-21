@@ -194,8 +194,8 @@ impl Insert for InsertConfigEntry {
 
 #[derive(Debug,Clone)]
 pub struct UpdateConfigEntry<'q> {
-    key: &'q str,
-    value: String,
+    pub key: &'q str,
+    pub value: String,
 }
 
 impl Update for UpdateConfigEntry<'_> {
