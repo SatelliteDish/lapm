@@ -1,11 +1,8 @@
-use std::io::empty;
-
 use keepass::db::EntryRef;
 use keepass::db::{GroupMut, fields};
 
-
+use std::time::Duration;
 use crate::entry::{FieldError, Insert, Update};
-
 use super::{
     Query,
     EntryError,
@@ -28,6 +25,15 @@ impl ConfigEntry {
         } else {
             Err(EntryError::SerializationError { value: self.value, value_t: "bool" })
         }
+    }
+
+    pub fn to_duration(self) -> Result<Duration, EntryError> {
+        let secs = self.value.parse::<u64>()
+            .map_err(|_| EntryError::SerializationError {
+                value: self.value,
+                value_t: "u64",
+            })?;
+        Ok(Duration::new(secs,0))
     }
 }
 
@@ -67,6 +73,15 @@ impl TryFrom<EntryRef<'_>> for ConfigEntry {
 pub struct QueryConfigEntry<'q>{
     pub key: Option<&'q str>,
     pub value: Option<&'q str>,
+}
+
+impl Default for QueryConfigEntry<'_> {
+    fn default() -> Self {
+        Self {
+            key: None,
+            value: None,
+        }
+    }
 }
 
 impl PartialEq<ConfigEntry> for QueryConfigEntry<'_> {
@@ -151,6 +166,13 @@ impl InsertConfigEntry {
         Self {
             key,
             value: value.to_string(),
+        }
+    }
+
+    pub fn from_duration(key: String, value: Duration) -> Self {
+        Self {
+            key,
+            value: value.as_secs().to_string(),
         }
     }
 }
