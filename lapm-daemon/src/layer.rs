@@ -14,7 +14,7 @@ use keepass::{Database, DatabaseKey, db::{GroupMut, fields}};
 use thiserror::Error;
 use derive_more::From;
 
-use crate::entry::PasswordEntry;
+use crate::entry::{Entry, PasswordEntry,Insert,password::InsertPasswordEntry};
 
 
 const DEF_TIMEOUT: u64 = 600; // 10 minutes
@@ -281,25 +281,11 @@ impl Layer {
     }
 
     // Entry
-    pub fn add_entry(&mut self, entry: PasswordEntry) -> Result<(), LayerError> {
+    pub fn insert<'a>(&'a mut self, req: impl Insert) -> Result<(), LayerError> {
         require_open!(self, |mut open| {
             let OpenLayer { db, .. } = open;
             let mut root = db.root_mut();
-            let mut inserted = root.add_entry();
-
-            inserted.set_unprotected(fields::USERNAME, &entry.username);
-            inserted.set_unprotected(fields::PASSWORD, &entry.password);
-
-            if let Some(title) = entry.title {
-                inserted.set_unprotected(fields::TITLE, &title);
-            }
-            if let Some(url) = entry.url {
-                inserted.set_unprotected(fields::URL, &url);
-            }
-            if let Some(notes) = entry.notes {
-                inserted.set_unprotected(fields::NOTES, &notes);
-            }
-
+            let _ = req.insert(&mut root);
 
             self.note_usage();
             self.save()?;

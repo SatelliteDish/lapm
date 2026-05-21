@@ -58,9 +58,9 @@ impl ConfigEntry {
 #[cfg(test)]
 mod tests {
     use keepass::Database;
-    use rand::RngExt;
 
     use super::ConfigEntry;
+    use crate::test_helpers::random_string;
 
 
     impl PartialEq for ConfigEntry {
@@ -72,29 +72,14 @@ mod tests {
 
     impl Eq for ConfigEntry {}
 
-
-
-    fn generate_random_string(length: usize) -> String {
-        const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-        let mut rng = rand::rng();
-
-        (0..length)
-            .map(|_| {
-                let idx = rng.random_range(0..CHARSET.len());
-                CHARSET[idx] as char
-            })
-            .collect()
-    }
-
-
     #[test]
     fn set_entry_can_be_retrieved() {
         let mut db = Database::new();
         let mut root = db.root_mut();
 
         let cases = (0..25).map(|_| ConfigEntry {
-            key: generate_random_string(15),
-            value: generate_random_string(25),
+            key: random_string(15),
+            value: random_string(25),
         }).collect::<Vec<_>>();
 
         for case in &cases {

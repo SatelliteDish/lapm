@@ -27,6 +27,7 @@ use std::{sync::{Arc,Mutex}};
 
 use crate::{
     App,
+    entry::password::InsertPasswordEntry,
 };
 
 pub async fn handle_commands(app: Arc<Mutex<App>>) -> Result<(), String> {
@@ -113,7 +114,7 @@ async fn execute_entry_command(app: Arc<Mutex<App>>, command: DaemonEntryCommand
                 .find(|lyr| lyr.name.as_str() == layer.as_str());
             if let Some(layer) = found {
                 DaemonEntryAddCommand::respond(
-                    layer.add_entry(entry.into())
+                    layer.insert(InsertPasswordEntry::from(entry))
                         .map_err(|e| {
                             eprint!("{e}");
                             IpcError::from(e)

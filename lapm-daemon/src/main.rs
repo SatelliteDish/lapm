@@ -10,6 +10,9 @@ mod config;
 mod command;
 mod entry;
 
+#[cfg(test)]
+mod test_helpers;
+
 mod layer;
 use layer::{
     Layer,
