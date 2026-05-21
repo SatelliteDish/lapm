@@ -28,44 +28,6 @@ impl PasswordEntry {
     }
 }
 
-impl TryFrom<KeePassEntryMut<'_>> for PasswordEntry {
-    type Error = EntryError;
-
-    fn try_from(value: KeePassEntryMut<'_>) -> Result<Self, Self::Error> {
-        let username = value.get(fields::USERNAME);
-        let password = value.get(fields::PASSWORD);
-
-        if let (Some(username), Some(password)) = (username, password) {
-            Ok(Self {
-                title: value.get(fields::TITLE).map(|str| str.to_string()),
-                username: username.to_string(),
-                password: password.to_string(),
-                url: value.get(fields::URL).map(|str| str.to_string()),
-                notes: value.get(fields::NOTES).map(|str| str.to_string()),
-                id: value.id(),
-            })
-        } else {
-            let mut errs: Vec<FieldError> = vec![];
-
-            if username.is_none() {
-                errs.push(FieldError {
-                    name: "username",
-                    reason: "is required".to_string(),
-                });
-            }
-            if password.is_none() {
-                errs.push(FieldError {
-                    name: "password",
-                    reason: "is required".to_string(),
-                });
-            }
-
-            Err(EntryError::InvalidFields { fields: errs })
-        }
-
-    }
-}
-
 impl TryFrom<KeePassEntryRef<'_>> for PasswordEntry {
     type Error = EntryError;
 
@@ -159,12 +121,10 @@ impl Query for QueryPasswordEntry<'_> {
     type Response = PasswordEntry;
 
     fn query(&self, group: &GroupRef) -> Vec<Self::Response> {
-        let ids = group.entry_ids();
         let mut res: Vec<PasswordEntry> = vec![];
 
-        for id in ids {
+        for ent in group.entries() {
             // ID was just queried so we know it's there
-            let ent = group.entry(id).unwrap();
             if self == &ent {
                 if let Ok(pwd) = PasswordEntry::try_from(ent) {
                     res.push(pwd);
