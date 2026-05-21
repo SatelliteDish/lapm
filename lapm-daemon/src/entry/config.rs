@@ -1,7 +1,16 @@
+use std::io::empty;
+
+use keepass::db::EntryRef;
 use keepass::db::{GroupMut, fields};
 
 
-use super::EntryError;
+use crate::entry::{FieldError, Insert, Update};
+
+use super::{
+    Query,
+    EntryError,
+    DeleteResponse,
+};
 
 #[derive(Debug,Clone)]
 pub struct ConfigEntry {
@@ -10,44 +19,11 @@ pub struct ConfigEntry {
 }
 
 impl ConfigEntry {
-    pub fn get(group: &mut GroupMut, key: String) -> Option<Self> {
-        let ent = group.entry_by_name_mut(&key)?;
-        let value = ent.get("value")?;
-
-        Some(Self {
-            key,
-            value: value.to_string(),
-        })
-    }
-
-    pub fn set(self, group: &mut GroupMut) {
-        match group.entry_by_name_mut(&self.key) {
-            Some(ent) => ent,
-            None => {
-                let mut ent = group.add_entry();
-                ent.set_unprotected(fields::TITLE, &self.key);
-                ent
-            },
-        }.set_unprotected("value", &self.value);
-    }
-
-    /*
-    *  Conversion functions, to convert self.value to various types
-    *  or to construct Self from various values types
-    * */
-
-    pub fn from_bool(key: String, value: bool) -> Self {
-        Self {
-            key,
-            value: value.to_string(),
-        }
-    }
-
     pub fn to_bool(self) -> Result<bool, EntryError> {
-        let str = self.value.as_str();
-        if str == "true" {
+        let value = self.value.as_str();
+        if value == "true" {
             Ok(true)
-        } else if str == "false" {
+        } else if value == "false" {
             Ok(false)
         } else {
             Err(EntryError::SerializationError { value: self.value, value_t: "bool" })
@@ -55,12 +31,171 @@ impl ConfigEntry {
     }
 }
 
+impl TryFrom<&EntryRef<'_>> for ConfigEntry {
+    type Error = EntryError;
+
+    fn try_from(value: &EntryRef<'_>) -> Result<Self, Self::Error> {
+        let key = value.get(fields::TITLE);
+        let value = value.get("value");
+
+        if let (Some(key), Some(value)) = (key,value) {
+            Ok(Self { key: key.to_string(), value: value.to_string() })
+        } else {
+            let mut errs: Vec<FieldError> = vec![];
+
+            if key.is_none() {
+                errs.push(FieldError { name: "key", reason: "is required".to_string() });
+            }
+            if value.is_none() {
+                errs.push(FieldError { name: "value", reason: "is required".to_string() });
+            }
+
+            Err(EntryError::InvalidFields { fields: errs })
+        }
+   }
+}
+
+impl TryFrom<EntryRef<'_>> for ConfigEntry {
+    type Error = EntryError;
+
+    fn try_from(value: EntryRef<'_>) -> Result<Self, Self::Error> {
+        Self::try_from(&value)
+    }
+}
+
+#[derive(Debug,Clone)]
+pub struct QueryConfigEntry<'q>{
+    pub key: Option<&'q str>,
+    pub value: Option<&'q str>,
+}
+
+impl PartialEq<ConfigEntry> for QueryConfigEntry<'_> {
+    fn eq(&self, other: &ConfigEntry) -> bool {
+        if let Some(key) = self.key {
+            if key != other.key.as_str() {
+                return false;
+            }
+        }
+
+        if let Some(value) = self.value {
+            if value != other.value.as_str() {
+                return false;
+            }
+        }
+
+        true
+    }
+}
+
+impl PartialEq<EntryRef<'_>> for QueryConfigEntry<'_> {
+    fn eq(&self, other: &EntryRef<'_>) -> bool {
+        let entry = match ConfigEntry::try_from(other) {
+            Ok(ent) => ent,
+            Err(_) => return false,
+        };
+        if let Some(key) = self.key {
+            if key != entry.key.as_str() {
+                return false;
+            }
+        }
+
+        if let Some(value) = self.value {
+            if value != entry.value.as_str() {
+                return false;
+            }
+        }
+
+        true
+    }
+}
+
+impl Query for QueryConfigEntry<'_> {
+    type Response = ConfigEntry;
+
+    fn query(&self, group: &keepass::db::GroupRef<'_>) -> Vec<Self::Response> {
+        let mut res: Vec<Self::Response> = vec![];
+
+        for ent in group.entries() {
+            if self == &ent {
+                if let Ok(cfg) = ConfigEntry::try_from(ent) {
+                    res.push(cfg);
+                }
+            }
+        }
+
+        res
+    }
+
+    fn delete(&self, group: & mut GroupMut<'_>) -> super::DeleteResponse {
+        let found = self.query(&group.as_ref());
+        match found.len() {
+            0 => DeleteResponse::NotFound,
+            1 => {
+                group.entry_by_name_mut(found[0].key.as_str())
+                    .unwrap().remove(); // Can safely unwrap
+                DeleteResponse::Success
+            },
+            _ => DeleteResponse::TooMany(found.len())
+        }
+    }
+}
+
+#[derive(Debug,Clone)]
+pub struct InsertConfigEntry {
+    pub key: String,
+    pub value: String,
+}
+
+impl InsertConfigEntry {
+    pub fn from_bool(key: String, value: bool) -> Self {
+        Self {
+            key,
+            value: value.to_string(),
+        }
+    }
+}
+
+impl Insert for InsertConfigEntry {
+    type Response = ConfigEntry;
+
+    fn insert(self, group: &mut GroupMut<'_>) -> Self::Response {
+        let mut ent = group.add_entry();
+        ent.set_unprotected(fields::TITLE, &self.key);
+        ent.set_unprotected("value", &self.value);
+
+        ConfigEntry {
+            key: self.key,
+            value: self.value,
+        }
+    }
+}
+
+#[derive(Debug,Clone)]
+pub struct UpdateConfigEntry<'q> {
+    key: &'q str,
+    value: String,
+}
+
+impl Update for UpdateConfigEntry<'_> {
+    fn update(self, group: &mut GroupMut) -> Option<()> {
+        let ids = group.entry_ids().collect::<Vec<_>>();
+        for id in ids {
+            let mut ent = group.entry_mut(id)?;
+            if ent.get(fields::TITLE)? == self.key {
+                ent.set_unprotected("value", &self.value);
+                return Some(())
+            }
+        }
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use keepass::Database;
 
-    use super::ConfigEntry;
     use crate::test_helpers::random_string;
+    use super::*;
 
 
     impl PartialEq for ConfigEntry {
@@ -83,13 +218,22 @@ mod tests {
         }).collect::<Vec<_>>();
 
         for case in &cases {
-            case.clone().set(&mut root);
+            let ConfigEntry { key, value } = case;
+
+            InsertConfigEntry {
+                key: key.to_string(),
+                value: value.to_string(),
+            }.insert(&mut root);
         }
 
-        for case in &cases {
+        for case in cases {
             assert_eq!(
-                Some(case),
-                ConfigEntry::get(&mut root, case.key.clone()).as_ref()
+                vec![case.clone()],
+                QueryConfigEntry{
+                    key: Some(&case.key.as_str()),
+                    value: None,
+                }
+                    .query(&root.as_ref()),
             );
         }
     }
@@ -101,25 +245,37 @@ mod tests {
 
         let key = "key".to_string();
 
-        ConfigEntry {
+        InsertConfigEntry {
             key: key.clone(),
             value: "old".to_string(),
-        }.set(&mut root);
+        }.insert(&mut root);
 
-        let new = ConfigEntry {
-            key: key.clone(),
+        let new = UpdateConfigEntry {
+            key: &key,
             value: "new".to_string(),
         };
-        new.clone().set(&mut root);
+        new.clone().update(&mut root);
 
-        assert_eq!(Some(new), ConfigEntry::get(&mut root, key.clone()));
+        assert_eq!(
+            Some(&ConfigEntry {
+                key: key.to_string(),
+                value: new.value.to_string(),
+            }),
+            QueryConfigEntry{ key: Some(&key), value: None }
+                .query(&root.as_ref())
+                .get(0));
     }
 
     #[test]
     fn bool_serialization_is_symmetric() {
-        let true_ent = ConfigEntry::from_bool("key".to_string(), true);
+        let mut db = Database::new();
+        let mut root = db.root_mut();
+
+        let true_ent = InsertConfigEntry::from_bool("key".to_string(), true)
+            .insert(&mut root);
         assert_eq!(true_ent.to_bool().ok(), Some(true));
-        let false_ent = ConfigEntry::from_bool("key".to_string(), false);
+        let false_ent = InsertConfigEntry::from_bool("key".to_string(), false)
+            .insert(&mut root);
         assert_eq!(false_ent.to_bool().ok(), Some(false));
     }
 
