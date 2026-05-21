@@ -10,18 +10,20 @@ use std::{
     path::{Path,PathBuf},
     time::{Duration, Instant},
 };
-use keepass::{Database, DatabaseKey, db::{GroupMut, fields}};
+use keepass::{Database, DatabaseKey, db::fields};
 use thiserror::Error;
 use derive_more::From;
 
-use crate::entry::{Entry, PasswordEntry,Insert,password::InsertPasswordEntry};
+use crate::entry::{
+    Insert,
+};
 
+mod config;
+use config::{
+    LayerConfig,
+    CONFIG_GROUP_NAME,
+};
 
-const DEF_TIMEOUT: u64 = 600; // 10 minutes
-
-const CONFIG_GROUP_NAME: &str = "__config__";
-const CONFIG_PUBLIC_USER_KEY: &str = "public_usernames";
-const CONFIG_TIMEOUT_KEY: &str = "timeout";
 
 macro_rules! require_open {
     ($self:expr, |$open:ident| $body:expr) => {
@@ -55,87 +57,6 @@ impl From<LayerError> for IpcError {
     }
 }
 
-#[derive(Debug,Clone)]
-pub struct LayerConfig {
-    pub timeout: Option<Duration>,
-    pub public_usernames: bool,
-}
-
-impl Default for LayerConfig {
-    fn default() -> Self {
-        Self {
-            timeout: Some(Duration::new(DEF_TIMEOUT,0)),
-            public_usernames: false,
-        }
-    }
-}
-
-impl LayerConfig {
-    fn get_by_key(conf_group: &mut GroupMut, key: &str) -> Option<String> {
-        match &conf_group.entry_by_name_mut(key) {
-            Some(ent) => {
-                ent.get("value").map(|v| v.to_string())
-            },
-            None => None,
-        }
-    }
-
-    fn set_by_key(conf_group: &mut GroupMut, key: &str, value: &str) {
-        if let Some(mut ent) = conf_group.entry_by_name_mut(key) {
-            ent.set_unprotected("value", value);
-        } else {
-            let mut ent = conf_group.add_entry();
-            ent.set_unprotected(fields::TITLE, key);
-            ent.set_unprotected("value", value);
-        }
-    }
-
-    fn remove_by_key(conf_group: &mut GroupMut, key: &str) {
-        if let Some(ent) = conf_group.entry_by_name_mut(key) {
-            ent.remove();
-        }
-    }
-
-    pub fn set_in_db(&self, db: &mut Database) {
-        let mut root = db.root_mut();
-        let mut config_group =  match root.group_by_name_mut(CONFIG_GROUP_NAME) {
-            Some(gp) => gp,
-            None => {
-                let mut group = root.add_group();
-                group.name = CONFIG_GROUP_NAME.to_string();
-                group
-            },
-        };
-
-        Self::set_by_key(
-            &mut config_group,
-            CONFIG_PUBLIC_USER_KEY,
-            &self.public_usernames.to_string(),
-        );
-
-        match self.timeout {
-            Some(timeout) => Self::set_by_key(
-                &mut config_group,
-                CONFIG_TIMEOUT_KEY,
-                &timeout.as_secs().to_string(),
-            ),
-            None => Self::remove_by_key(&mut config_group, CONFIG_TIMEOUT_KEY),
-        }
-    }
-
-    pub fn from_db(db: &mut Database) -> Option<Self> {
-        let mut root = db.root_mut();
-        let mut config_group = root.group_by_name_mut(CONFIG_GROUP_NAME)?;
-
-        Some(Self {
-            public_usernames: Self::get_by_key(&mut config_group, CONFIG_PUBLIC_USER_KEY)
-                .map(|str| if str == "true" { true } else { false })
-                .unwrap_or(false),
-            timeout: Self::get_by_key(&mut config_group, CONFIG_TIMEOUT_KEY)
-                .map(|st| Duration::new(st.parse::<u64>().unwrap_or(60),0)),
-        })
-    }
-}
 
 #[derive(Debug,Clone)]
 pub struct OpenLayer {
