@@ -3,10 +3,7 @@ use lapm_core::{
         entry::{
             DaemonEntry, DaemonEntryAddCommand, DaemonEntryListCommand
         }, layer::{
-            DaemonLayerAddCommand,
-            DaemonLayerListCommand,
-            DaemonLayerOpenCommand,
-            LayerInfo,
+            DaemonLayerAddCommand, DaemonLayerConfigChangeCommand, DaemonLayerConfigShowCommand, DaemonLayerListCommand, DaemonLayerOpenCommand, LayerInfo
         }
     },
     stream::IpcCommand as _,
@@ -38,7 +35,7 @@ enum CliCommand {
 }
 
 #[derive(Args, Clone)]
-#[group(required = true, multiple = false)]
+#[group(multiple = false)]
 struct TimeoutArg {
     #[arg(long, value_name = "SECONDS")]
     timeout: Option<u64>,
@@ -61,6 +58,22 @@ enum LayerCommand {
     },
     List,
     Open{ name: String },
+    Config{
+        #[command(subcommand)]
+        action: LayerConfigCommand,
+    }
+}
+
+#[derive(Subcommand, Clone)]
+enum LayerConfigCommand {
+    Show{ layer: String },
+    Change{
+        layer: String,
+        #[command(flatten)]
+        timeout: Option<TimeoutArg>,
+        #[arg(long)]
+        public_usernames: Option<bool>,
+    }
 }
 
 struct LayerInfoTableRow(LayerInfo);
@@ -233,6 +246,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         .send(&mut stream).await?;
 
                     Ok(())
+                },
+                LayerCommand::Config { action } => {
+                    match action {
+                        LayerConfigCommand::Show{ layer } => {
+                            let mut stream = lapm_core::stream::get_connection_stream().await?;
+                            let res = DaemonLayerConfigShowCommand{ layer }
+                                .send(&mut stream).await?;
+                            println!("{res:?}");
+                            Ok(())
+                        },
+                        LayerConfigCommand::Change { layer, timeout, public_usernames } => {
+                            let mut stream = lapm_core::stream::get_connection_stream().await?;
+
+                            let timeout = if let Some(tout) = timeout {
+                                if tout.no_timeout {
+                                    Some(None)
+                                } else {
+                                    Some(tout.timeout
+                                        .or(tout.timeout_m.map(|tout| tout * 60))
+                                        .or(tout.timeout_h.map(|tout| tout * 3600)))
+                                }
+                            } else { None };
+
+                                DaemonLayerConfigChangeCommand{ layer, timeout, public_usernames }
+                                    .send(&mut stream).await?;
+                            Ok(())
+                        }
+                    }
                 }
             }
         },

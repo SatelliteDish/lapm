@@ -18,7 +18,7 @@ use crate::entry::{
     Insert,
 };
 
-mod config;
+pub mod config;
 use config::{
     LayerConfig,
     CONFIG_GROUP_NAME,
@@ -29,7 +29,7 @@ macro_rules! require_open {
     ($self:expr, |$open:ident| $body:expr) => {
         match &$self.state {
         LayerState::Open($open) => $body,
-        LayerState::Closed => Err(LayerError::LayerClosed { name: &$self.name }),
+        LayerState::Closed => Err(LayerError::LayerClosed { name: $self.name.to_string() }),
         }
     };
     ($self:expr, |mut $open:ident| $body:expr) => {
@@ -196,8 +196,16 @@ impl Layer {
     pub fn set_config(&mut self, config: LayerConfig) -> Result<(), LayerError> {
         require_open!(self, |mut open| {
             config.set_in_db(&mut open.db);
+            open.config = config;
             self.note_usage();
+            self.save()?;
             Ok(())
+        })
+    }
+
+    pub fn get_config(&self) -> Result<&LayerConfig, LayerError> {
+        require_open!(self, |open| {
+            Ok(&open.config)
         })
     }
 

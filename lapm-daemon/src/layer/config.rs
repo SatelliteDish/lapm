@@ -6,6 +6,7 @@ use keepass::{
         GroupRef,
     }
 };
+use lapm_core::command::layer::DaemonLayerConfig;
 
 use crate::entry::{
     Insert, Query, Update, config::{InsertConfigEntry, QueryConfigEntry, UpdateConfigEntry}
@@ -31,6 +32,21 @@ impl Default for LayerConfig {
             timeout: Some(Duration::new(DEF_TIMEOUT,0)),
             public_usernames: false,
         }
+    }
+}
+
+impl From<&LayerConfig> for DaemonLayerConfig {
+    fn from(value: &LayerConfig) -> Self {
+        Self {
+            timeout: value.timeout.map(|tmt| tmt.as_secs()),
+            public_usernames: value.public_usernames,
+        }
+    }
+}
+
+impl From<LayerConfig> for DaemonLayerConfig {
+    fn from(value: LayerConfig) -> Self {
+        DaemonLayerConfig::from(&value)
     }
 }
 

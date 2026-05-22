@@ -14,20 +14,16 @@ use lapm_core::{
             DaemonEntryListCommand,
         },
         layer::{
-            DaemonLayerAddCommand,
-            DaemonLayerCommand,
-            DaemonLayerListCommand,
-            DaemonLayerOpenCommand,
-            LayerInfo,
-            ListLayersResponse,
+            DaemonLayerAddCommand, DaemonLayerCommand, DaemonLayerConfigChangeCommand, DaemonLayerConfigCommand, DaemonLayerConfigShowCommand, DaemonLayerListCommand, DaemonLayerOpenCommand, LayerInfo, ListLayersResponse,
         },
-    }, stream
+    }, stream::{self, StreamError}
 };
-use std::{sync::{Arc,Mutex}};
+use std::{sync::{Arc,Mutex}, time::Duration};
 
 use crate::{
     App,
     entry::password::InsertPasswordEntry,
+    layer::config::LayerConfig,
 };
 
 pub async fn handle_commands(app: Arc<Mutex<App>>) -> Result<(), String> {
@@ -63,16 +59,18 @@ async fn execute_command(app: Arc<Mutex<App>>, command: DaemonCommand, stream: &
 }
 
 async fn execute_layer_command(app: Arc<Mutex<App>>, command: DaemonLayerCommand, stream: &mut Stream) -> Result<(), Box<dyn std::error::Error>> {
-    let mut state = app.lock()
-        .map_err(|e| e.to_string())?;
     match command {
         DaemonLayerCommand::Add(cmd) => {
+            let mut state = app.lock()
+                .map_err(|e| e.to_string())?;
             let DaemonLayerAddCommand { name, password, timeout } = cmd;
             let add_res = state.add_layer(name, password, timeout).await
                 .map_err(|e| IpcError::Unauthorized(e));
             DaemonLayerAddCommand::respond(add_res, stream).await
         },
         DaemonLayerCommand::List(_) => {
+            let state = app.lock()
+                .map_err(|e| e.to_string())?;
             let layer_info = state.config.layers.iter()
                 .map(|lyr| LayerInfo::from(lyr.clone()))
                 .collect::<Vec<_>>();
@@ -82,6 +80,8 @@ async fn execute_layer_command(app: Arc<Mutex<App>>, command: DaemonLayerCommand
             ).await
         },
         DaemonLayerCommand::Open(cmd) => {
+            let mut state = app.lock()
+                .map_err(|e| e.to_string())?;
             let DaemonLayerOpenCommand{ name, password } = cmd;
             let layer_opt = state.config.layers.iter_mut()
                 .find(|lyr| lyr.name.as_str() == name.as_str());
@@ -99,9 +99,70 @@ async fn execute_layer_command(app: Arc<Mutex<App>>, command: DaemonLayerCommand
                 ).await
             }
         },
+        DaemonLayerCommand::Config(cmd) => execute_layer_config_command(app, cmd, stream).await,
     }.map_err(|e| e.into())
 }
 
+
+async fn execute_layer_config_command(app: Arc<Mutex<App>>, command: DaemonLayerConfigCommand, stream: &mut Stream) -> Result<(), StreamError> {
+    match command {
+        DaemonLayerConfigCommand::Show(cmd) => {
+            let DaemonLayerConfigShowCommand { layer } = cmd;
+            let state = app.lock().unwrap();
+
+            match state.config.layers.iter()
+                .find(|lyr| lyr.name.as_str() == layer.as_str()) {
+                Some(lyr) => {
+                    DaemonLayerConfigShowCommand::respond(
+                        lyr.get_config()
+                            .map(|cfg| cfg.into())
+                            .map_err(|e| IpcError::Unauthorized(e.to_string())),
+                        stream,
+                    ).await
+                },
+                None => {
+                    DaemonLayerConfigChangeCommand::respond(
+                        Err(IpcError::NotFound(format!("layer {layer} not found"))),
+                        stream,
+                    ).await
+                }
+            }
+        },
+        DaemonLayerConfigCommand::Change(cmd) => {
+            let DaemonLayerConfigChangeCommand { layer, timeout, public_usernames } = cmd;
+            let mut state = app.lock().unwrap();
+
+            match state.config.layers.iter_mut()
+                .find(|lyr| lyr.name.as_str() == layer.as_str()) {
+                Some(lyr) => {
+                    let cfg = lyr.get_config()
+                        .map_err(|e| IpcError::Unauthorized(e.to_string()))?;
+                    let res = lyr.set_config(LayerConfig {
+                        timeout: if let Some(tout) = timeout {
+                            tout.map(|t| Duration::new(t,0))
+                        } else { cfg.timeout },
+                        public_usernames: if let Some(pub_users) = public_usernames {
+                            pub_users
+                        } else { cfg.public_usernames },
+                    });
+                    DaemonLayerConfigChangeCommand::respond(
+                        res
+                            .map(|_| ())
+                            .map_err(|e| IpcError::Unauthorized(e.to_string())),
+                        stream,
+                    ).await
+                },
+                None => {
+                    DaemonLayerConfigShowCommand::respond(
+                        Err(IpcError::NotFound(format!("layer {layer} not found"))),
+                        stream,
+                    ).await
+                }
+            }
+        }
+    }
+
+}
 
 async fn execute_entry_command(app: Arc<Mutex<App>>, command: DaemonEntryCommand, stream: &mut Stream) -> Result<(), Box<dyn std::error::Error>> {
     let mut state = app.lock()
