@@ -1,4 +1,9 @@
-use lapm_core::command::layer::LayerInfo;
+use lapm_core::{
+    command::layer::{
+        DaemonLayerAddCommand, DaemonLayerConfigChangeCommand, DaemonLayerConfigShowCommand, DaemonLayerListCommand, DaemonLayerOpenCommand, LayerInfo
+    },
+    stream::{IpcCommand as _, StreamError},
+};
 use clap::Subcommand;
 use tabled::{
     Table,
@@ -14,8 +19,20 @@ use tabled::{
         },
     },
 };
+use thiserror::Error;
+
+use crate::password::{self, PasswordError};
 use super::TimeoutArg;
 
+
+#[derive(Debug,Error)]
+pub enum LayerError {
+    #[error("{0}")]
+    PasswordError(#[from]PasswordError),
+    #[error("{0}")]
+    StreamError(#[from]StreamError),
+}
+type LayerResult<T> = Result<T,LayerError>;
 
 #[derive(Subcommand, Clone)]
 #[command(version, about, long_about = None)]
@@ -89,4 +106,89 @@ impl FromIterator<LayerInfoTableRow> for Table {
         table
 
     }
+}
+
+pub async fn handle_layer_command(command: LayerCommand) -> Result<(), LayerError> {
+    match command {
+        LayerCommand::Add{ name, timeout } => add_layer(name, timeout).await,
+        LayerCommand::List => list_layers().await,
+        LayerCommand::Open { name } => open_layer(name).await,
+        LayerCommand::Config { action } => handle_layer_config_command(action).await,
+    }
+}
+
+async fn add_layer(name: String, timeout: TimeoutArg) -> LayerResult<()> {
+    let password = password::get_and_confirm_password()?;
+    let timeout = if timeout.no_timeout {
+        None
+    } else {
+        timeout.timeout
+            .or(timeout.timeout_m.map(|tout| tout * 60))
+            .or(timeout.timeout_h.map(|tout| tout * 3600))
+    };
+
+    // Open stream AFTER password is received
+    let mut stream = lapm_core::stream::get_connection_stream().await?;
+    DaemonLayerAddCommand{ name, password, timeout }
+        .send(&mut stream).await?;
+    Ok(())
+}
+
+async fn list_layers() -> LayerResult<()> {
+    let mut stream = lapm_core::stream::get_connection_stream().await?;
+    let res = DaemonLayerListCommand{}
+        .send(&mut stream).await?;
+    let table = res.layers.into_iter()
+        .map(|lyr| LayerInfoTableRow::from(lyr))
+        .collect::<Table>();
+    println!("{table}");
+
+    Ok(())
+}
+
+async fn open_layer(name: String) -> LayerResult<()> {
+    let password = password::prompt_password(
+        format!("Please enter the password for layer \"{name}\":"),
+        3
+    )?;
+
+    // Open stream AFTER password is received
+    let mut stream = lapm_core::stream::get_connection_stream().await?;
+    DaemonLayerOpenCommand{ name, password }
+        .send(&mut stream).await?;
+
+    Ok(())
+}
+
+async fn handle_layer_config_command(command: LayerConfigCommand) -> LayerResult<()> {
+    match command {
+        LayerConfigCommand::Show{ layer } => show_layer_config(layer).await,
+        LayerConfigCommand::Change { layer, timeout, public_usernames } => change_layer_config(layer, timeout, public_usernames).await,
+    }
+}
+
+async fn show_layer_config(layer: String) -> LayerResult<()> {
+    let mut stream = lapm_core::stream::get_connection_stream().await?;
+    let res = DaemonLayerConfigShowCommand{ layer }
+        .send(&mut stream).await?;
+    println!("{res:?}");
+    Ok(())
+}
+
+async fn change_layer_config(layer: String, timeout: Option<TimeoutArg>, public_usernames: Option<bool>) -> LayerResult<()> {
+    let mut stream = lapm_core::stream::get_connection_stream().await?;
+
+    let timeout = if let Some(tout) = timeout {
+        if tout.no_timeout {
+            Some(None)
+        } else {
+            Some(tout.timeout
+                .or(tout.timeout_m.map(|tout| tout * 60))
+                .or(tout.timeout_h.map(|tout| tout * 3600)))
+        }
+    } else { None };
+
+    DaemonLayerConfigChangeCommand{ layer, timeout, public_usernames }
+        .send(&mut stream).await?;
+    Ok(())
 }

@@ -8,7 +8,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use thiserror::Error;
 
 
-#[derive(Debug, Serialize, Deserialize, Error)]
+#[derive(Debug,Clone,Serialize,Deserialize,Error)]
 pub enum IpcError {
     #[error("Unauthorized: {0}")]
     Unauthorized(String),
@@ -20,7 +20,7 @@ pub enum IpcError {
     OperationFailed(String),
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug,Clone,Error)]
 pub enum StreamError {
     #[error("{0}")]
     SerializationError(String),
@@ -32,17 +32,19 @@ pub enum StreamError {
     ReadError(String),
     #[error("{0}")]
     DaemonError(#[from]IpcError),
+    #[error("{0}")]
+    SocketError(String),
 }
 
-pub fn get_connection_name() -> Result<Name<'static>, String> {
+pub fn get_connection_name() -> Result<Name<'static>, StreamError> {
     "lapm.sock".to_ns_name::<GenericNamespaced>()
-        .map_err(|e| format!("Failed to create socket name: {e}"))
+        .map_err(|e| StreamError::SocketError(format!("Failed to create socket name: {e}")))
 }
 
-pub async fn get_connection_stream() -> Result<Stream, String> {
+pub async fn get_connection_stream() -> Result<Stream, StreamError> {
     let name = get_connection_name()?;
     Stream::connect(name).await
-        .map_err(|e| e.to_string())
+        .map_err(|e| StreamError::SocketError(format!("Failed to open socket:\n{e}")))
 }
 
 

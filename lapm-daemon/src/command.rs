@@ -27,7 +27,8 @@ use crate::{
 };
 
 pub async fn handle_commands(app: Arc<Mutex<App>>) -> Result<(), String> {
-    let sock_name = lapm_core::stream::get_connection_name()?;
+    let sock_name = lapm_core::stream::get_connection_name()
+        .map_err(|e| e.to_string())?;
     let listener = ListenerOptions::new().name(sock_name.clone()).create_tokio().map_err(|e| e.to_string())?;
 
     let local = tokio::task::LocalSet::new();

@@ -1,9 +1,8 @@
 use lapm_core::{
-    command::{
-        entry::{
-            DaemonEntry,
+    command::entry::{
+            DaemonEntry, DaemonEntryAddCommand, DaemonEntryListCommand
         },
-    },
+    stream::{IpcCommand as _, StreamError},
 };
 use clap::Subcommand;
 use tabled::{
@@ -16,6 +15,19 @@ use tabled::{
         object::Columns,
     },
 };
+use thiserror::Error;
+
+use crate::password::{self, PasswordError};
+
+
+#[derive(Debug,Error)]
+pub enum EntryError {
+    #[error("{0}")]
+    PasswordError(#[from]PasswordError),
+    #[error("{0}")]
+    StreamError(#[from]StreamError),
+}
+type EntryResult<T> = Result<T, EntryError>;
 
 
 pub struct EntryTableRow {
@@ -86,3 +98,44 @@ pub enum EntryCommand {
         copy: bool,
     },
 }
+
+pub async fn handle_entry_command(command: EntryCommand) -> EntryResult<()> {
+    match command {
+        EntryCommand::Add { name, layer, url } => add_entry(name, layer, url).await,
+        EntryCommand::List{ url, show, copy } => list_entries(url, show, copy).await
+    }
+}
+
+async fn add_entry(name: String, layer: String, url: Option<String>) -> EntryResult<()> {
+            let pwd = password::get_and_confirm_password()?;
+            let mut stream = lapm_core::stream::get_connection_stream().await?;
+            DaemonEntryAddCommand {
+                layer,
+                entry: DaemonEntry {
+                    username: name,
+                    password: pwd,
+                    url,
+                    notes: None,
+                    title: None,
+                },
+            }
+                .send(&mut stream).await?;
+            Ok(())
+}
+
+async fn list_entries(url: Option<String>, show_passwords: bool, copy: bool) -> EntryResult<()> {
+            let mut stream = lapm_core::stream::get_connection_stream().await?;
+            let entries = DaemonEntryListCommand{ url, copy }
+                .send(&mut stream).await?;
+
+            if !copy || show_passwords {
+                let table = EntryTable(
+                    entries.into_iter().map(|ent| EntryTableRow {
+                        entry: ent,
+                        show_password: show_passwords,
+                    }).collect::<Vec<_>>(),
+                );
+                println!("{}", Table::from(table));
+            }
+            Ok(())
+        }
