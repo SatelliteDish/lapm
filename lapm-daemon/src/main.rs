@@ -27,7 +27,8 @@ struct App {
 
 impl App {
     pub async fn add_layer(&mut self, name: String, password: String, timeout: Option<u64>) -> Result<(), String> {
-        let layer = Layer::create(name, &self.work_dir, password, timeout).await?;
+        let layer = Layer::create(name, &self.work_dir, password, timeout).await
+            .map_err(|e| e.to_string())?;
         self.config.layers.push(layer);
         config::write_config(&self.work_dir, &self.config)
     }

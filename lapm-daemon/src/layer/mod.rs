@@ -10,7 +10,11 @@ use std::{
     path::{Path,PathBuf},
     time::{Duration, Instant},
 };
-use keepass::{Database, DatabaseKey, db::fields};
+use keepass::{
+    Database,
+    DatabaseKey,
+    db::fields,
+};
 use thiserror::Error;
 use derive_more::From;
 
@@ -19,10 +23,7 @@ use crate::entry::{
 };
 
 pub mod config;
-use config::{
-    LayerConfig,
-    CONFIG_GROUP_NAME,
-};
+use config::LayerConfig;
 
 
 macro_rules! require_open {
@@ -46,6 +47,8 @@ pub enum LayerError {
     LayerClosed{ name: String },
     #[error("Cannot access Database file at \"{path}\" to {operation}")]
     DbUnreachable{ path: String, operation: String },
+    #[error("{0}")]
+    DbError(String),
 }
 
 impl From<LayerError> for IpcError {
@@ -53,10 +56,11 @@ impl From<LayerError> for IpcError {
         match &err {
             LayerError::LayerClosed {..} => IpcError::Unauthorized(err.to_string()),
             LayerError::DbUnreachable {..} => IpcError::OperationFailed(err.to_string()),
+            LayerError::DbError(_) => IpcError::OperationFailed(err.to_string()),
         }
     }
 }
-
+type LayerResult<T> = Result<T, LayerError>;
 
 #[derive(Debug,Clone)]
 pub struct OpenLayer {
@@ -82,7 +86,7 @@ pub struct Layer {
 
 impl Layer {
     // Constructors
-    pub async fn create(name: String, dir: &Path, password: String, timeout: Option<u64>) -> Result<Self,String> {
+    pub async fn create(name: String, dir: &Path, password: String, timeout: Option<u64>) -> LayerResult<Self> {
         let mut db = Database::new();
         db.meta.database_name = Some(name.clone());
 
@@ -103,8 +107,7 @@ impl Layer {
                 config,
             }.into(),
         };
-        layer.save()
-            .map_err(|e| e.to_string())?;
+        layer.save()?;
 
         Ok(layer)
     }
@@ -125,37 +128,28 @@ impl Layer {
         }
     }
 
-    pub fn open(&mut self, password: &str) -> Result<(),String> {
+    pub fn open(&mut self, password: &str) -> LayerResult<()> {
         if self.is_open() {
             return Ok(());
         }
 
         let mut file = File::open(&self.path)
-            .map_err(|e| e.to_string())?;
+            .map_err(|_| LayerError::DbUnreachable { path: self.path.to_string_lossy().to_string(), operation: "open".to_string() })?;
         let key = DatabaseKey::new().with_password(password);
-        let db = Database::open(&mut file, key.clone())
-            .map_err(|e| e.to_string())?;
-        let db_root = db.root();
-        let config_group = db_root.group_by_name(CONFIG_GROUP_NAME)
-            .ok_or("Vault has no config")?;
-        let timeout_entry = config_group.entry_by_name("timeout");
-        let timeout = if let Some(tent) = timeout_entry {
-            let value = tent.get("value");
-            if let Some(tout) = value {
-                Some(tout.parse::<u64>().map_err(|e| e.to_string())?)
-            } else {
-                None
-            }
-        } else { None };
+        let mut db = Database::open(&mut file, key.clone())
+            .map_err(|e| LayerError::DbError(e.to_string()))?;
+        let config = LayerConfig::from_db(&mut db)
+            .unwrap_or({
+                let config = LayerConfig::default();
+                config.set_in_db(&mut db);
+                config
+            });
 
         self.state = OpenLayer {
             last_used: Instant::now(),
             db,
             key,
-            config: LayerConfig {
-                timeout: timeout.map(|tout| Duration::new(tout, 0)),
-                public_usernames: false,
-            }
+            config: config,
         }.into();
         Ok(())
     }
@@ -164,7 +158,7 @@ impl Layer {
         self.state = LayerState::Closed;
     }
 
-    pub fn save(&mut self) -> Result<(), LayerError> {
+    pub fn save(&mut self) -> LayerResult<()> {
         require_open!(self, |mut open| {
             let OpenLayer { db, key, .. } = open;
             let mut fd = File::create(&self.path)
@@ -193,7 +187,7 @@ impl Layer {
     }
 
     // Config
-    pub fn set_config(&mut self, config: LayerConfig) -> Result<(), LayerError> {
+    pub fn set_config(&mut self, config: LayerConfig) -> LayerResult<()> {
         require_open!(self, |mut open| {
             config.set_in_db(&mut open.db);
             open.config = config;
@@ -203,14 +197,14 @@ impl Layer {
         })
     }
 
-    pub fn get_config(&self) -> Result<&LayerConfig, LayerError> {
+    pub fn get_config(&self) -> LayerResult<&LayerConfig> {
         require_open!(self, |open| {
             Ok(&open.config)
         })
     }
 
     // Entry
-    pub fn insert<'a>(&'a mut self, req: impl Insert) -> Result<(), LayerError> {
+    pub fn insert<'a>(&'a mut self, req: impl Insert) -> LayerResult<()> {
         require_open!(self, |mut open| {
             let OpenLayer { db, .. } = open;
             let mut root = db.root_mut();
@@ -222,7 +216,7 @@ impl Layer {
         })
     }
 
-    pub fn get_entries(&mut self) -> Result<Vec<DaemonEntry>, LayerError> {
+    pub fn get_entries(&mut self) -> LayerResult<Vec<DaemonEntry>> {
         require_open!(self, |mut open| {
             let OpenLayer { db, .. } = open;
             let root = db.root();
