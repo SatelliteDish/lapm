@@ -14,16 +14,16 @@ use lapm_core::{
         ListLayersResponse,
     },
 };
-use std::{sync::{Arc,Mutex}, time::Duration};
+use std::time::Duration;
 
 use crate::{
-    App,
+    AppState,
     layer::config::LayerConfig,
 };
 use super::CommandError;
 
 
-pub async fn execute_layer_command(app: Arc<Mutex<App>>, command: DaemonLayerCommand, stream: &mut Stream) -> Result<(), CommandError> {
+pub async fn execute_layer_command(app: AppState, command: DaemonLayerCommand, stream: &mut Stream) -> Result<(), CommandError> {
     match command {
         DaemonLayerCommand::Add(cmd) => add_layer(app, stream, cmd).await,
         DaemonLayerCommand::List(cmd) => list_layers(app, stream, cmd).await,
@@ -32,7 +32,7 @@ pub async fn execute_layer_command(app: Arc<Mutex<App>>, command: DaemonLayerCom
     }
 }
 
-async fn add_layer(app: Arc<Mutex<App>>, stream: &mut Stream, cmd: DaemonLayerAddCommand) -> Result<(),CommandError> {
+async fn add_layer(app: AppState, stream: &mut Stream, cmd: DaemonLayerAddCommand) -> Result<(),CommandError> {
     let mut state = app.lock()
         .map_err(|_| CommandError::MutexError)?;
     let DaemonLayerAddCommand { name, password, timeout } = cmd;
@@ -42,7 +42,7 @@ async fn add_layer(app: Arc<Mutex<App>>, stream: &mut Stream, cmd: DaemonLayerAd
         .map_err(|e| e.into())
 }
 
-async fn list_layers(app: Arc<Mutex<App>>, stream: &mut Stream, _: DaemonLayerListCommand) -> Result<(), CommandError> {
+async fn list_layers(app: AppState, stream: &mut Stream, _: DaemonLayerListCommand) -> Result<(), CommandError> {
             let state = app.lock()
                 .map_err(|_| CommandError::MutexError)?;
             let layer_info = state.config.layers.iter()
@@ -55,7 +55,7 @@ async fn list_layers(app: Arc<Mutex<App>>, stream: &mut Stream, _: DaemonLayerLi
                 .map_err(|e| e.into())
         }
 
-async fn open_layer(app: Arc<Mutex<App>>, stream: &mut Stream, cmd: DaemonLayerOpenCommand) -> Result<(),CommandError> {
+async fn open_layer(app: AppState, stream: &mut Stream, cmd: DaemonLayerOpenCommand) -> Result<(),CommandError> {
             let mut state = app.lock()
                 .map_err(|_| CommandError::MutexError)?;
             let DaemonLayerOpenCommand{ name, password } = cmd;
@@ -78,7 +78,7 @@ async fn open_layer(app: Arc<Mutex<App>>, stream: &mut Stream, cmd: DaemonLayerO
             }
         }
 
-async fn execute_layer_config_command(app: Arc<Mutex<App>>, command: DaemonLayerConfigCommand, stream: &mut Stream) -> Result<(), CommandError> {
+async fn execute_layer_config_command(app: AppState, command: DaemonLayerConfigCommand, stream: &mut Stream) -> Result<(), CommandError> {
     match command {
         DaemonLayerConfigCommand::Show(cmd) => show_layer_config(app, stream, cmd).await,
         DaemonLayerConfigCommand::Change(cmd) => change_layer_config(app, stream, cmd).await,
@@ -86,7 +86,7 @@ async fn execute_layer_config_command(app: Arc<Mutex<App>>, command: DaemonLayer
 
 }
 
-async fn show_layer_config(app: Arc<Mutex<App>>, stream: &mut Stream, cmd: DaemonLayerConfigShowCommand) -> Result<(), CommandError> {
+async fn show_layer_config(app: AppState, stream: &mut Stream, cmd: DaemonLayerConfigShowCommand) -> Result<(), CommandError> {
     let DaemonLayerConfigShowCommand { layer } = cmd;
     let state = app.lock()
         .map_err(|_| CommandError::MutexError)?;
@@ -110,7 +110,7 @@ async fn show_layer_config(app: Arc<Mutex<App>>, stream: &mut Stream, cmd: Daemo
     }.map_err(|e| e.into())
 }
 
-async fn change_layer_config(app: Arc<Mutex<App>>, stream: &mut Stream, cmd: DaemonLayerConfigChangeCommand) -> Result<(), CommandError> {
+async fn change_layer_config(app: AppState, stream: &mut Stream, cmd: DaemonLayerConfigChangeCommand) -> Result<(), CommandError> {
     let DaemonLayerConfigChangeCommand { layer, timeout, public_usernames } = cmd;
     let mut state = app.lock()
         .map_err(|_| CommandError::MutexError)?;

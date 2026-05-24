@@ -13,10 +13,10 @@ use lapm_core::{
     },
 };
 use thiserror::Error;
-use std::sync::{Arc,Mutex};
 
 use crate::{
-    App, layer::LayerError,
+    AppState,
+    layer::LayerError,
 };
 
 mod entry;
@@ -37,7 +37,7 @@ pub enum CommandError {
     SocketError,
 }
 
-pub async fn handle_commands(app: Arc<Mutex<App>>) -> Result<(), CommandError> {
+pub async fn handle_commands(app: AppState) -> Result<(), CommandError> {
     let sock_name = lapm_core::stream::get_connection_name()
         .map_err(|_| CommandError::SocketError)?;
     let listener = ListenerOptions::new()
@@ -66,7 +66,7 @@ pub async fn handle_commands(app: Arc<Mutex<App>>) -> Result<(), CommandError> {
     Ok(())
 }
 
-async fn execute_command(app: Arc<Mutex<App>>, command: DaemonCommand, stream: &mut Stream) -> Result<(), CommandError> {
+async fn execute_command(app: AppState, command: DaemonCommand, stream: &mut Stream) -> Result<(), CommandError> {
     match command {
         DaemonCommand::Layer(layer) => execute_layer_command(app, layer, stream).await,
         DaemonCommand::Entry(entry) => execute_entry_command(app, entry, stream).await,

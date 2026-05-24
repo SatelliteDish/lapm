@@ -24,6 +24,7 @@ struct App {
     work_dir: PathBuf,
     config: config::AppConfig,
 }
+type AppState = Arc<Mutex<App>>;
 
 impl App {
     pub async fn add_layer(&mut self, name: String, password: String, timeout: Option<u64>) -> Result<(), String> {
@@ -33,6 +34,7 @@ impl App {
         config::write_config(&self.work_dir, &self.config)
     }
 }
+
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

@@ -12,21 +12,22 @@ use lapm_core::{
         DaemonEntryListCommand,
     },
 };
-use std::sync::{Arc,Mutex};
 
 use crate::{
-    App, command::CommandError, entry::password::InsertPasswordEntry
+    AppState,
+    command::CommandError,
+    entry::password::InsertPasswordEntry,
 };
 
 
-pub async fn execute_entry_command(app: Arc<Mutex<App>>, command: DaemonEntryCommand, stream: &mut Stream) -> Result<(), CommandError> {
+pub async fn execute_entry_command(app: AppState, command: DaemonEntryCommand, stream: &mut Stream) -> Result<(), CommandError> {
     match command {
         DaemonEntryCommand::Add(cmd)  => add_entry(app, stream, cmd).await,
         DaemonEntryCommand::List(cmd) => list_entries(app, stream, cmd).await,
     }
 }
 
-async fn add_entry(app: Arc<Mutex<App>>, stream: &mut Stream, cmd: DaemonEntryAddCommand) -> Result<(), CommandError> {
+async fn add_entry(app: AppState, stream: &mut Stream, cmd: DaemonEntryAddCommand) -> Result<(), CommandError> {
 
     let DaemonEntryAddCommand{ entry, layer } = cmd;
     let mut state = app.lock()
@@ -52,7 +53,7 @@ async fn add_entry(app: Arc<Mutex<App>>, stream: &mut Stream, cmd: DaemonEntryAd
     }
 }
 
-async fn list_entries(app: Arc<Mutex<App>>, stream: &mut Stream, cmd: DaemonEntryListCommand) -> Result<(), CommandError> {
+async fn list_entries(app: AppState, stream: &mut Stream, cmd: DaemonEntryListCommand) -> Result<(), CommandError> {
     let mut state = app.lock()
         .map_err(|_| CommandError::MutexError)?;
     let DaemonEntryListCommand { url, copy } = cmd;
